@@ -107,39 +107,51 @@ $eventsStmt->execute([$firstDayOfMonth, $lastDayOfMonth]);
 $monthEvents = $eventsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Handle time off request submission (via AJAX)
-$requestSuccess = null;
-$requestError = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_time_off'])) {
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $requestError = "Invalid CSRF token.";
-    } else {
-        $leaveType = filter_var($_POST['leave_type'], FILTER_SANITIZE_STRING);
-        $startDate = filter_var($_POST['start_date'], FILTER_SANITIZE_STRING);
-        $endDate = filter_var($_POST['end_date'], FILTER_SANITIZE_STRING);
-        $notes = filter_var($_POST['notes'], FILTER_SANITIZE_STRING);
-
-        if (!in_array($leaveType, ['vacation', 'sick', 'personal', 'bereavement', 'other'])) {
-            $requestError = "Invalid leave type.";
-        } elseif (!DateTime::createFromFormat('Y-m-d', $startDate) || !DateTime::createFromFormat('Y-m-d', $endDate)) {
-            $requestError = "Invalid date format.";
-        } else {
-            $insertStmt = $pdo->prepare("
-                INSERT INTO time_off_requests 
-                (employee_id, leave_type, start_date, end_date, notes, status) 
-                VALUES (?, ?, ?, ?, ?, 'pending')
-            ");
-            if ($insertStmt->execute([$currentUserId, $leaveType, $startDate, $endDate, $notes])) {
-                $requestSuccess = "Time off request submitted successfully!";
-            } else {
-                $requestError = "Failed to submit time off request.";
-            }
-        }
-    }
     header('Content-Type: application/json');
-    echo json_encode([
-        'success' => isset($requestSuccess),
-        'message' => $requestSuccess ?? $requestError
-    ]);
+    
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
+        exit();
+    }
+
+    $leaveType = filter_var($_POST['leave_type'] ?? '', FILTER_SANITIZE_STRING);
+    $startDate = filter_var($_POST['start_date'] ?? '', FILTER_SANITIZE_STRING);
+    $endDate = filter_var($_POST['end_date'] ?? '', FILTER_SANITIZE_STRING);
+    $notes = filter_var($_POST['notes'] ?? '', FILTER_SANITIZE_STRING);
+
+    if (!in_array($leaveType, ['vacation', 'sick', 'personal', 'bereavement', 'other'])) {
+        echo json_encode(['success' => false, 'message' => 'Invalid leave type.']);
+        exit();
+    }
+
+    if (!DateTime::createFromFormat('Y-m-d', $startDate) || !DateTime::createFromFormat('Y-m-d', $endDate)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid date format.']);
+        exit();
+    }
+
+    if (strtotime($endDate) < strtotime($startDate)) {
+        echo json_encode(['success' => false, 'message' => 'End date cannot be before start date.']);
+        exit();
+    }
+
+    try {
+        $insertStmt = $pdo->prepare("
+            INSERT INTO time_off_requests 
+            (employee_id, leave_type, start_date, end_date, notes, status, created_at) 
+            VALUES (?, ?, ?, ?, ?, 'pending', NOW())
+        ");
+        $success = $insertStmt->execute([$currentUserId, $leaveType, $startDate, $endDate, $notes]);
+        
+        if ($success) {
+            echo json_encode(['success' => true, 'message' => 'Time off request submitted successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to submit time off request.']);
+        }
+    } catch (PDOException $e) {
+        error_log("Time off request insertion failed: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Database error occurred.']);
+    }
     exit();
 }
 
@@ -216,10 +228,10 @@ $philippineHolidays = [
         color: var(--white);
         box-shadow: var(--shadow);
         transition: var(--transition);
-        position: sticky; /* Make sidebar sticky */
-        top: 0; /* Stick to the top of the viewport */
-        height: 100vh; /* Ensure it spans the full height */
-        overflow-y: auto; /* Allow scrolling if content overflows */
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
     }
 
     .sidebar.collapsed {
@@ -758,7 +770,7 @@ $philippineHolidays = [
 
     /* Interviews Section */
     .interviews-section {
-        grid-column: span 6; /* Widened from span 4 to span 6 */
+        grid-column: span 6;
         background-color: var(--white);
         border-radius: var(--border-radius);
         padding: 24px;
@@ -806,7 +818,7 @@ $philippineHolidays = [
         border-radius: var(--border-radius);
         background-color: var(--light);
         transition: var(--transition);
-        width: 100%; /* Ensure full width utilization */
+        width: 100%;
     }
 
     .interview-item:hover {
@@ -816,14 +828,14 @@ $philippineHolidays = [
     .interview-time {
         font-size: 14px;
         color: var(--text-light);
-        width: 100px; /* Slightly increased for better spacing */
+        width: 100px;
         font-weight: 500;
-        flex-shrink: 0; /* Prevent shrinking */
+        flex-shrink: 0;
     }
 
     .interview-details {
         flex: 1;
-        padding-right: 10px; /* Add padding for better spacing */
+        padding-right: 10px;
     }
 
     .interview-name {
@@ -846,7 +858,7 @@ $philippineHolidays = [
         background-color: rgba(191, 162, 219, 0.2);
         color: var(--secondary);
         font-weight: 500;
-        flex-shrink: 0; /* Prevent shrinking */
+        flex-shrink: 0;
     }
 
     /* Modal Styles */
@@ -1112,7 +1124,7 @@ $philippineHolidays = [
             grid-column: span 6;
         }
         .interviews-section {
-            grid-column: span 6; /* Maintain wider interviews section */
+            grid-column: span 6;
         }
     }
 
@@ -1124,7 +1136,7 @@ $philippineHolidays = [
             grid-column: span 12;
         }
         .interviews-section {
-            grid-column: span 12; /* Full width on smaller screens */
+            grid-column: span 12;
         }
         .dashboard-grid {
             padding: 20px;
@@ -1133,7 +1145,7 @@ $philippineHolidays = [
 
     @media (max-width: 768px) {
         .sidebar {
-            position: fixed; /* Override sticky for mobile */
+            position: fixed;
             left: 0;
             top: 0;
             bottom: 0;
@@ -1464,6 +1476,7 @@ $philippineHolidays = [
             </div>
             <form id="timeOffRequestForm">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                <input type="hidden" name="submit_time_off" value="1">
                 <div class="form-group">
                     <label for="leaveType">Leave Type</label>
                     <select class="form-control" id="leaveType" name="leave_type" required>
@@ -1489,7 +1502,7 @@ $philippineHolidays = [
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline" id="cancelRequest">Cancel</button>
-                    <button type="submit" name="submit_time_off" class="btn btn-primary">Submit Request</button>
+                    <button type="submit" class="btn btn-primary">Submit Request</button>
                 </div>
             </form>
         </div>
@@ -1657,22 +1670,30 @@ $philippineHolidays = [
         // Time Off Request Form Submission
         document.getElementById('timeOffRequestForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const formData = new FormData(this);
-            fetch('dashboard.php', {
+            const form = this;
+            const formData = new FormData(form);
+            
+            fetch(window.location.href, {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
             .then(data => {
                 showNotification(data.message, data.success ? 'success' : 'error');
                 if (data.success) {
                     timeOffRequestModal.classList.remove('active');
-                    this.reset();
+                    form.reset();
                     setTimeout(() => location.reload(), 2000);
                 }
             })
             .catch(error => {
-                showNotification('An error occurred. Please try again.', 'error');
+                console.error('Error:', error);
+                showNotification('An error occurred while submitting the request. Please try again.', 'error');
             });
         });
 

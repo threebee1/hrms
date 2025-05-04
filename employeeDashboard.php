@@ -1270,7 +1270,7 @@ $philippineHolidays = [
                     <span class="menu-badge"><?php echo $unreadMessages; ?></span>
                 <?php endif; ?>
             </a>
-            <a href="login.php" class="menu-item">
+            <a href="login.html" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>
             </a>

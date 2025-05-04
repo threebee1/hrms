@@ -37,27 +37,44 @@ if (empty($_SESSION['csrf_token'])) {
 
 $user_id = $_SESSION['user_id'];
 
-// Fetch user and employee data
-$stmt = $pdo->prepare("
-    SELECT u.id, u.username, u.email, u.role, u.password AS hashed_password, 
-           e.first_name, e.last_name, e.phone, e.birthdate, e.address, e.department, e.position, e.hire_date
-    FROM users u
-    JOIN employees e ON u.id = e.id
-    WHERE u.id = ?
-");
-try {
-    $stmt->execute([$user_id]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    error_log("User query failed: " . $e->getMessage());
-    die('Internal server error');
+// Function to fetch user data
+function fetchUserData($pdo, $user_id) {
+    $stmt = $pdo->prepare("
+        SELECT u.id, u.username, u.email, u.role, u.password AS hashed_password, 
+               e.first_name, e.last_name, e.phone, e.birthdate, e.address, e.department, e.position, e.hire_date
+        FROM users u
+        LEFT JOIN employees e ON u.id = e.id
+        WHERE u.id = ?
+    ");
+    try {
+        $stmt->execute([$user_id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("User query failed: " . $e->getMessage());
+        return false;
+    }
 }
 
+// Fetch initial user data
+$user = fetchUserData($pdo, $user_id);
 if (!$user) {
     session_destroy();
     header('Location: login.php?error=user_not_found');
     exit();
 }
+
+// Set default values for missing fields
+$user['username'] = $user['username'] ?? 'Unknown';
+$user['role'] = $user['role'] ?? 'employee';
+$user['email'] = $user['email'] ?? '';
+$user['first_name'] = $user['first_name'] ?? '';
+$user['last_name'] = $user['last_name'] ?? '';
+$user['phone'] = $user['phone'] ?? '';
+$user['birthdate'] = $user['birthdate'] ?? '';
+$user['address'] = $user['address'] ?? '';
+$user['department'] = $user['department'] ?? 'Not Assigned';
+$user['position'] = $user['position'] ?? 'Not Assigned';
+$user['hire_date'] = $user['hire_date'] ?? 'N/A';
 
 // Fetch unread messages count
 try {
@@ -66,16 +83,16 @@ try {
     $unreadMessages = $stmt->fetch(PDO::FETCH_ASSOC)['unread'];
 } catch (PDOException $e) {
     error_log("Unread messages query failed: " . $e->getMessage());
-    $unreadMessages = 0; // Fallback to 0 if query fails
+    $unreadMessages = 0;
 }
 
 // Format birthdate for display (YYYY/MM/DD)
 $formatted_birthdate = $user['birthdate'] ? date('Y/m/d', strtotime($user['birthdate'])) : '';
 
+// Handle form submission
 $error_message = '';
 $success_message = '';
 
-// Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
     $first_name = trim($_POST['first_name'] ?? '');
     $last_name = trim($_POST['last_name'] ?? '');
@@ -138,20 +155,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                         $update_pwd->execute([$hashed_password, $user_id]);
                     }
 
-                    // Update employees table
-                    $update_employee = $pdo->prepare("
-                        UPDATE employees 
-                        SET first_name = ?, last_name = ?, phone = ?, birthdate = ?, address = ? 
-                        WHERE id = ?
-                    ");
-                    $update_employee->execute([$first_name, $last_name, $phone, $mysql_birthdate, $address, $user_id]);
+                    // Check if employee record exists
+                    $check_employee = $pdo->prepare("SELECT id FROM employees WHERE id = ?");
+                    $check_employee->execute([$user_id]);
+                    $employee_exists = $check_employee->fetch();
+
+                    if ($employee_exists) {
+                        // Update existing employee record
+                        $update_employee = $pdo->prepare("
+                            UPDATE employees 
+                            SET first_name = ?, last_name = ?, phone = ?, birthdate = ?, address = ? 
+                            WHERE id = ?
+                        ");
+                        $update_employee->execute([$first_name, $last_name, $phone, $mysql_birthdate, $address, $user_id]);
+                    } else {
+                        // Insert new employee record
+                        $insert_employee = $pdo->prepare("
+                            INSERT INTO employees (id, first_name, last_name, phone, birthdate, address, department, position, hire_date)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ");
+                        $insert_employee->execute([
+                            $user_id,
+                            $first_name,
+                            $last_name,
+                            $phone,
+                            $mysql_birthdate,
+                            $address,
+                            $user['department'] ?: 'Not Assigned',
+                            $user['position'] ?: 'Not Assigned',
+                            $user['hire_date'] ?: null
+                        ]);
+                    }
 
                     $pdo->commit();
                     $success_message = "Your information has been updated successfully!";
 
                     // Refresh user data
-                    $stmt->execute([$user_id]);
-                    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                    $user = fetchUserData($pdo, $user_id);
+                    if (!$user) {
+                        throw new Exception("Failed to fetch updated user data.");
+                    }
+                    $user['username'] = $user['username'] ?? 'Unknown';
+                    $user['role'] = $user['role'] ?? 'employee';
+                    $user['email'] = $user['email'] ?? '';
+                    $user['first_name'] = $user['first_name'] ?? '';
+                    $user['last_name'] = $user['last_name'] ?? '';
+                    $user['phone'] = $user['phone'] ?? '';
+                    $user['birthdate'] = $user['birthdate'] ?? '';
+                    $user['address'] = $user['address'] ?? '';
+                    $user['department'] = $user['department'] ?? 'Not Assigned';
+                    $user['position'] = $user['position'] ?? 'Not Assigned';
+                    $user['hire_date'] = $user['hire_date'] ?? 'N/A';
                     $formatted_birthdate = $user['birthdate'] ? date('Y/m/d', strtotime($user['birthdate'])) : '';
 
                 } catch (Exception $e) {
@@ -188,9 +242,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             --gray: #E5E5E5;
             --border-radius: 12px;
             --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
+            --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.15);
             --transition: all 0.3s ease;
-            --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0.3);
+            --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0ζ
+            .3);
+            --gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
         }
 
         * {
@@ -211,7 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         /* Sidebar Styles */
         .sidebar {
             width: 260px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            background: var(--gradient);
             color: var(--white);
             box-shadow: var(--shadow);
             transition: var(--transition);
@@ -272,6 +328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .toggle-btn:hover {
             color: var(--white);
+            transform: scale(1.1);
         }
 
         .sidebar-menu {
@@ -285,12 +342,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             color: var(--white);
             text-decoration: none;
             transition: var(--transition);
-            font-size: 14px;
-            font-weight: 500;
         }
 
         .menu-item:hover {
             background-color: var(--primary-light);
+            transform: translateX(5px);
         }
 
         .menu-item.active {
@@ -301,16 +357,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .menu-item i {
             margin-right: 12px;
             font-size: 18px;
-            width: 20px;
-            text-align: center;
         }
 
         .menu-badge {
-            margin-left: auto;
-            background-color: var(--error);
+            background: var(--error);
             color: var(--white);
-            border-radius: 10px;
+            border-radius: 50%;
             padding: 2px 8px;
+            margin-left: auto;
             font-size: 12px;
             font-weight: 600;
         }
@@ -318,9 +372,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         /* Main Content Styles */
         .main-content {
             flex: 1;
+            overflow-y: auto;
             padding-bottom: 60px;
-            background: var(--white);
-            min-height: 100vh;
+            background-color: var(--white);
         }
 
         /* Header Styles */
@@ -329,7 +383,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             justify-content: space-between;
             align-items: center;
             padding: 20px 30px;
-            background-color: var(--white);
+            background: var(--white);
             box-shadow: var(--shadow);
             position: sticky;
             top: 0;
@@ -338,7 +392,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .header-title h1 {
             font-family: 'Poppins', sans-serif;
-            font-size: 26px;
+            font-size: 28px;
             color: var(--primary);
             margin-bottom: 5px;
         }
@@ -357,7 +411,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .current-time {
             font-size: 14px;
             color: var(--text-light);
-            font-weight: 500;
         }
 
         .user-profile {
@@ -366,108 +419,102 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         }
 
         .user-avatar {
-            width: 42px;
-            height: 42px;
-            background: var(--primary);
+            width: 44px;
+            height: 44px;
+            background: var(--gradient);
             color: var(--white);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
-            font-weight: 600;
             margin-right: 10px;
-        }
-
-        .user-profile span {
-            font-size: 14px;
-            font-weight: 500;
+            font-weight: 600;
+            font-size: 16px;
+            box-shadow: var(--shadow);
         }
 
         /* Content Styles */
         .content {
-            max-width: 1000px;
-            margin: 24px auto;
+            max-width: 1200px;
+            margin: 40px auto;
             padding: 0 30px;
         }
 
         .personal-section {
             background: var(--white);
             border-radius: var(--border-radius);
-            padding: 24px;
+            padding: 30px;
             box-shadow: var(--shadow);
             transition: var(--transition);
         }
 
         .personal-section:hover {
             box-shadow: var(--shadow-hover);
+            transform: translateY(-4px);
         }
 
         .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
-            padding-bottom: 12px;
+            margin-bottom: 30px;
             border-bottom: 1px solid var(--gray);
+            padding-bottom: 10px;
         }
 
         .section-title {
             font-family: 'Poppins', sans-serif;
-            font-size: 20px;
-            font-weight: 600;
+            font-size: 24px;
             color: var(--primary);
+            font-weight: 600;
         }
 
         .profile-info-container {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-            margin-bottom: 24px;
+            gap: 24px;
+            margin-bottom: 30px;
         }
 
         .profile-card {
-            background: var(--white);
-            border: 1px solid var(--gray);
+            background: linear-gradient(135deg, var(--light) 0%, var(--white) 100%);
             border-radius: var(--border-radius);
-            padding: 16px;
+            padding: 20px;
+            box-shadow: var(--shadow);
             transition: var(--transition);
         }
 
         .profile-card:hover {
-            border-color: var(--primary-light);
             box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
         }
 
         .profile-card h5 {
-            font-size: 16px;
-            font-weight: 600;
+            font-family: 'Poppins', sans-serif;
+            font-size: 18px;
             color: var(--primary);
-            margin-bottom: 12px;
+            margin-bottom: 15px;
             display: flex;
             align-items: center;
-            gap: 8px;
         }
 
         .profile-card p {
             font-size: 14px;
             color: var(--text);
-            margin-bottom: 8px;
-            display: flex;
-            justify-content: space-between;
+            margin-bottom: 10px;
         }
 
         .profile-card p strong {
             color: var(--text-light);
             font-weight: 500;
-            flex: 0 0 40%;
+            margin-right: 8px;
         }
 
         .form-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-            margin-bottom: 24px;
+            gap: 24px;
+            margin-bottom: 30px;
         }
 
         .form-group {
@@ -481,14 +528,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .form-label {
             font-size: 14px;
-            font-weight: 500;
             color: var(--text);
-            margin-bottom: 6px;
+            font-weight: 600;
+            margin-bottom: 8px;
         }
 
         .form-control {
             width: 100%;
-            padding: 10px 12px;
+            padding: 12px;
             border: 1px solid var(--gray);
             border-radius: var(--border-radius);
             font-size: 14px;
@@ -500,75 +547,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             outline: none;
             border-color: var(--secondary);
             box-shadow: var(--focus-ring);
+            background: rgba(191, 162, 219, 0.05);
         }
 
         .form-control:invalid:focus {
             border-color: var(--error);
-            box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.2);
+            box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.3);
         }
 
         textarea.form-control {
-            min-height: 100px;
+            min-height: 120px;
             resize: vertical;
         }
 
         .btn {
-            padding: 10px 18px;
+            padding: 14px 24px;
             border-radius: var(--border-radius);
             font-size: 14px;
-            font-weight: 500;
             cursor: pointer;
             transition: var(--transition);
+            font-weight: 600;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
         }
 
         .btn-primary {
-            background: var(--primary);
+            background: var(--gradient);
             color: var(--white);
             border: none;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
         }
 
         .btn-primary:hover {
             background: var(--primary-light);
             box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s ease, height 0.6s ease;
+        }
+
+        .btn-primary:hover::before {
+            width: 200px;
+            height: 200px;
         }
 
         .alert-success,
         .alert-error {
-            padding: 12px 16px;
+            padding: 20px;
             border-radius: var(--border-radius);
-            margin-bottom: 16px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            font-size: 14px;
-            animation: fadeIn 0.3s ease;
-            border-left: 4px solid;
+            font-size: 16px;
+            animation: fadeIn 0.5s ease;
+            box-shadow: var(--shadow);
         }
 
         .alert-success {
-            background: rgba(75, 181, 67, 0.1);
+            background: rgba(75, 181, 67, 0.15);
             color: var(--success);
-            border-color: var(--success);
+            border: 1px solid rgba(75, 181, 67, 0.3);
         }
 
         .alert-error {
-            background: rgba(255, 107, 107, 0.1);
+            background: rgba(255, 107, 107, 0.15);
             color: var(--error);
-            border-color: var(--error);
+            border: 1px solid rgba(255, 107, 107, 0.3);
         }
 
         .alert-success i,
         .alert-error i {
-            margin-right: 8px;
-            font-size: 16px;
+            margin-right: 12px;
+            font-size: 20px;
         }
 
         .password-section {
             grid-column: span 2;
-            margin-top: 24px;
-            padding-top: 16px;
+            margin-top: 30px;
+            padding-top: 20px;
             border-top: 1px solid var(--gray);
         }
 
@@ -577,42 +647,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         }
 
         .password-field .form-control {
-            padding-right: 36px;
+            padding-right: 40px;
+            border: 2px solid var(--gray);
+            background: var(--white);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: var(--transition);
+        }
+
+        .password-field .form-control:focus {
+            border-color: var(--secondary);
+            box-shadow: var(--focus-ring), inset 0 2px 4px rgba(0, 0, 0, 0.05);
+            background: var(--white);
         }
 
         .password-toggle {
             position: absolute;
-            right: 8px;
+            right: 12px;
             top: 50%;
             transform: translateY(-50%);
             background: none;
             border: none;
             color: var(--text-light);
             cursor: pointer;
-            font-size: 14px;
+            font-size: 16px;
             padding: 8px;
+            transition: var(--transition);
         }
 
         .password-toggle:hover {
             color: var(--primary);
         }
 
+        .password-toggle i {
+            display: block;
+        }
+
         .form-text {
             font-size: 12px;
             color: var(--text-light);
-            margin-top: 4px;
+            margin-top: 5px;
         }
 
-        .password-section .form-group.checkbox {
+        .password-section .form-group {
+            display: flex;
             flex-direction: row;
             align-items: center;
-            gap: 8px;
-            margin-bottom: 16px;
+            gap: 10px;
         }
 
         .password-section input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
+            margin: 0;
             cursor: pointer;
             accent-color: var(--primary);
             border-radius: 4px;
@@ -621,7 +707,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .password-section .form-label {
             margin-bottom: 0;
             cursor: pointer;
-            font-weight: 500;
         }
 
         .flatpickr-calendar {
@@ -629,15 +714,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             border: 1px solid var(--gray);
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
+            font-family: 'Outfit', sans-serif;
         }
 
         .flatpickr-month {
             color: var(--text);
+            font-family: 'Poppins', sans-serif;
             font-weight: 600;
         }
 
         .flatpickr-weekdays {
             border-bottom: 1px solid var(--gray);
+            padding-bottom: 8px;
         }
 
         .flatpickr-weekday {
@@ -648,10 +736,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .flatpickr-day {
             border-radius: var(--border-radius);
             color: var(--text);
+            transition: var(--transition);
         }
 
         .flatpickr-day:hover {
             background: var(--light);
+            box-shadow: var(--shadow);
         }
 
         .flatpickr-day.selected,
@@ -665,6 +755,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .flatpickr-day.today {
             background: var(--secondary);
             color: var(--white);
+            font-weight: 600;
         }
 
         .flatpickr-day.disabled,
@@ -677,6 +768,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .flatpickr-prev-month,
         .flatpickr-next-month {
             color: var(--text-light);
+            border-radius: var(--border-radius);
         }
 
         .flatpickr-prev-month:hover,
@@ -685,10 +777,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             background: var(--light);
         }
 
+        .numInputWrapper input {
+            border: 1px solid var(--gray);
+            border-radius: var(--border-radius);
+            padding: 5px;
+        }
+
+        .flatpickr-current-month .numInputWrapper span.arrowUp::after,
+        .flatpickr-current-month .numInputWrapper span.arrowDown::after {
+            border-top-color: var(--text);
+        }
+
         .age-validation {
             font-size: 12px;
             color: var(--error);
-            margin-top: 4px;
+            margin-top: 5px;
             display: none;
         }
 
@@ -698,18 +801,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .update-notification {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            bottom: 30px;
+            right: 30px;
             background: var(--white);
-            padding: 15px 20px;
+            padding: 20px 25px;
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
             display: flex;
             align-items: center;
             z-index: 1000;
-            animation: slideIn 0.3s ease-out;
+            animation: slideIn 0.5s ease-out;
             border-left: 4px solid var(--primary);
-            max-width: 400px;
+            min-width: 300px;
         }
 
         @keyframes slideIn {
@@ -724,11 +827,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .update-notification i {
             color: var(--primary);
-            margin-right: 10px;
-            font-size: 18px;
+            margin-right: 12px;
+            font-size: 20px;
         }
 
         .update-notification span {
+            margin-right: 15px;
             font-size: 14px;
             flex: 1;
         }
@@ -736,17 +840,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .close-notification {
             background: none;
             border: none;
-            font-size: 18px;
+            font-size: 20px;
             cursor: pointer;
             color: var(--text-light);
+            transition: var(--transition);
         }
 
         .close-notification:hover {
             color: var(--primary);
+            transform: scale(1.1);
         }
 
-        /* Responsive Styles */
-        @media (max-width: 1200px) {
+        @media (max-width: 1400px) {
             .profile-info-container {
                 grid-template-columns: 1fr;
             }
@@ -758,6 +863,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             }
             .password-section {
                 grid-column: span 1;
+            }
+        }
+
+        @media (max-width: 992px) {
+            .content {
+                padding: 0 20px;
+                margin: 20px auto;
+            }
+            .personal-section {
+                padding: 20px;
             }
         }
 
@@ -786,17 +901,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 width: 100%;
                 justify-content: space-between;
             }
-            .content {
-                padding: 0 12px;
-                margin: 16px auto;
-            }
-            .personal-section {
-                padding: 16px;
-            }
-            .update-notification {
-                max-width: 90%;
-                bottom: 12px;
-                right: 12px;
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
             }
         }
 
@@ -844,7 +952,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                     <span class="menu-badge"><?php echo htmlspecialchars($unreadMessages); ?></span>
                 <?php endif; ?>
             </a>
-            <a href="logout.php" class="menu-item">
+            <a href="login.html" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>
             </a>
@@ -863,14 +971,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 <div class="current-time" id="currentTime">
                     <?php 
                     date_default_timezone_set('Asia/Manila');
-                    echo date('h:i A'); 
+                    echo date('l, F j, Y g:i A'); 
                     ?>
                 </div>
                 <div class="user-profile">
                     <div class="user-avatar">
                         <?php 
-                        $initials = substr($user['username'] ?? '', 0, 1) ?: 'U';
-                        echo htmlspecialchars(strtoupper($initials));
+                        $initials = substr($user['username'], 0, 2) ?: 'UK';
+                        echo htmlspecialchars($initials);
                         ?>
                     </div>
                     <span><?php echo htmlspecialchars($user['username'] . ' - ' . ucfirst($user['role'])); ?></span>
@@ -902,12 +1010,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 <!-- Profile Information -->
                 <div class="profile-info-container">
                     <div class="profile-card">
-                        <h5><i class="fas fa-id-card"></i> Account Details</h5>
+                        <h5><i class="fas fa-id-card me-2"></i>Account Details</h5>
                         <p><strong>Username:</strong> <?php echo htmlspecialchars($user['username']); ?></p>
                         <p><strong>Role:</strong> <?php echo htmlspecialchars(ucfirst($user['role'])); ?></p>
                     </div>
                     <div class="profile-card">
-                        <h5><i class="fas fa-briefcase"></i> Employment Info</h5>
+                        <h5><i class="fas fa-briefcase me-2"></i>Employment Info</h5>
                         <p><strong>Department:</strong> <?php echo htmlspecialchars($user['department']); ?></p>
                         <p><strong>Position:</strong> <?php echo htmlspecialchars($user['position']); ?></p>
                         <p><strong>Hire Date:</strong> <?php echo htmlspecialchars($user['hire_date']); ?></p>
@@ -944,7 +1052,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                             <textarea class="form-control" id="address" name="address" rows="4" required aria-required="true"><?php echo htmlspecialchars($user['address']); ?></textarea>
                         </div>
                         <div class="password-section">
-                            <div class="form-group checkbox">
+                            <div class="form-group">
                                 <input type="checkbox" id="changePassword" aria-controls="passwordFields">
                                 <label for="changePassword" class="form-label">Change Password</label>
                             </div>
@@ -979,7 +1087,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                     </div>
                     <div class="form-group">
                         <button type="submit" class="btn btn-primary" aria-label="Save changes">
-                            <i class="fas fa-save"></i> Save Changes
+                            <i class="fas fa-save me-2"></i>Save Changes
                         </button>
                     </div>
                 </form>
@@ -996,8 +1104,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         // Sidebar Toggle
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('collapsed');
-            this.querySelector('i').classList.toggle('fa-chevron-left');
-            this.querySelector('i').classList.toggle('fa-chevron-right');
         });
 
         // Current Time Update
@@ -1005,6 +1111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             const timeElement = document.getElementById('currentTime');
             const now = new Date();
             timeElement.textContent = now.toLocaleString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
                 hour: 'numeric',
                 minute: 'numeric',
                 hour12: true

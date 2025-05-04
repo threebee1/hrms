@@ -37,12 +37,12 @@ if (empty($_SESSION['csrf_token'])) {
 
 $user_id = $_SESSION['user_id'];
 
-// Fetch user data
+// Fetch user data with LEFT JOIN to handle missing employee records
 $stmt = $pdo->prepare("
     SELECT u.id, u.username, u.email, u.role, 
            e.first_name, e.last_name, e.department, e.position
     FROM users u
-    JOIN employees e ON u.id = e.id
+    LEFT JOIN employees e ON u.id = e.id
     WHERE u.id = ?
 ");
 try {
@@ -58,6 +58,12 @@ if (!$user) {
     header('Location: login.php?error=user_not_found');
     exit();
 }
+
+// Set default values for missing employee data
+$user['first_name'] = $user['first_name'] ?? '';
+$user['last_name'] = $user['last_name'] ?? '';
+$user['department'] = $user['department'] ?? 'Not Assigned';
+$user['position'] = $user['position'] ?? 'Not Assigned';
 
 // Fetch unread messages count
 try {
@@ -603,7 +609,7 @@ try {
                 padding: 15px;
             }
             .header-info {
-                widthLeyre: 100%;
+                width: 100%;
                 justify-content: space-between;
             }
         }
@@ -652,7 +658,7 @@ try {
                     <span class="menu-badge"><?php echo htmlspecialchars($unreadMessages); ?></span>
                 <?php endif; ?>
             </a>
-            <a href="logout.php" class="menu-item">
+            <a href="login.html" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>
             </a>
@@ -704,6 +710,12 @@ try {
                         <div class="alert-error" role="alert">
                             <i class="fas fa-exclamation-circle"></i>
                             <?php echo htmlspecialchars($error_message); ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (empty($user['department']) || empty($user['position'])): ?>
+                        <div class="alert-error" role="alert">
+                            <i class="fas fa-exclamation-circle"></i>
+                            Your employee profile is incomplete. Please contact HR to update your details.
                         </div>
                     <?php endif; ?>
 

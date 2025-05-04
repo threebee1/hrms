@@ -2,8 +2,7 @@
 /**
  * Add New Employee Page
  * Handles employee creation with form validation, account setup, and profile picture upload.
- * Enhanced with stricter validation, transactions, and modernized styling.
- * Reverted to previous sidebar and widened main content.
+ * Fixed employee_id column error in users table insert.
  */
 
 session_set_cookie_params([
@@ -45,7 +44,7 @@ $success_message = $_SESSION['success_message'] ?? '';
 $error_message = $_SESSION['error_message'] ?? '';
 unset($_SESSION['success_message'], $_SESSION['error_message']);
 $form_data = $_SESSION['form_data'] ?? [];
-$create_account = isset($form_data['create_account']) || !isset($form_data['submit']);
+$create_account = isset($form_data['create_account']);
 
 // Form Submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'], $_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
@@ -53,28 +52,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'], $_POST['csr
     $create_account = isset($_POST['create_account']);
 
     // Sanitize Inputs
-    $first_name = trim($_POST['first_name'] ?? '');
-    $last_name = trim($_POST['last_name'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $phone = trim($_POST['phone'] ?? '');
+    $first_name = filter_var(trim($_POST['first_name'] ?? ''), FILTER_SANITIZE_SPECIAL_CHARS);
+    $last_name = filter_var(trim($_POST['last_name'] ?? ''), FILTER_SANITIZE_SPECIAL_CHARS);
+    $email = filter_var(trim($_POST['email'] ?? ''), FILTER_SANITIZE_EMAIL);
+    $phone = filter_var(trim($_POST['phone'] ?? ''), FILTER_SANITIZE_SPECIAL_CHARS);
     $birthdate = trim($_POST['birthdate'] ?? '');
-    $address = trim($_POST['address'] ?? '');
-    $department = trim($_POST['department'] ?? '');
-    $position = trim($_POST['position'] ?? '');
-    $role = trim($_POST['role'] ?? '');
+    $address = filter_var(trim($_POST['address'] ?? ''), FILTER_SANITIZE_SPECIAL_CHARS);
+    $department = filter_var(trim($_POST['department'] ?? ''), FILTER_SANITIZE_SPECIAL_CHARS);
+    $position = filter_var(trim($_POST['position'] ?? ''), FILTER_SANITIZE_SPECIAL_CHARS);
+    $role = filter_var(trim($_POST['role'] ?? ''), FILTER_SANITIZE_SPECIAL_CHARS);
     $hire_date = trim($_POST['hire_date'] ?? '');
-    $account_username = $create_account ? trim($_POST['account_username'] ?? '') : '';
+    $account_username = $create_account ? filter_var(trim($_POST['account_username'] ?? ''), FILTER_SANITIZE_SPECIAL_CHARS) : '';
     $account_password = $create_account ? ($_POST['account_password'] ?? '') : '';
 
     // Validation
-    if (!preg_match('/^[A-Za-z\s\'-]{2,50}$/', $first_name)) {
+    $error_message = '';
+    if (!preg_match('/^[A-Za-z\s\'-]+$/u', $first_name) || strlen($first_name) < 2 || strlen($first_name) > 50) {
         $error_message = 'First name must be 2-50 characters, containing only letters, spaces, hyphens, or apostrophes.';
-    } elseif (!preg_match('/^[A-Za-z\s\'-]{2,50}$/', $last_name)) {
+    } elseif (!preg_match('/^[A-Za-z\s\'-]+$/u', $last_name) || strlen($last_name) < 2 || strlen($last_name) > 50) {
         $error_message = 'Last name must be 2-50 characters, containing only letters, spaces, hyphens, or apostrophes.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error_message = 'Invalid email format.';
     } elseif (!preg_match('/^(09\d{9}|\+639\d{9})$/', $phone)) {
-        $error_message = 'Phone number must be 09XXXXXXXXX (11 digits) or +639XXXXXXXXX (12 characters).';
+        $error_message = 'Phone number must be 09XXXXXXXXX or +639XXXXXXXXX.';
     } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $birthdate) || !DateTime::createFromFormat('Y-m-d', $birthdate)) {
         $error_message = 'Invalid birthdate format (YYYY-MM-DD).';
     } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $hire_date) || !DateTime::createFromFormat('Y-m-d', $hire_date)) {
@@ -83,6 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'], $_POST['csr
         $error_message = 'Username must be 3-20 characters, containing only letters, numbers, dots, or underscores.';
     } elseif ($create_account && strlen($account_password) < 8) {
         $error_message = 'Password must be at least 8 characters.';
+    } elseif ($create_account && empty($role)) {
+        $error_message = 'Please select a role.';
     }
 
     // Validate Birthdate Age (20-65 years)
@@ -137,14 +139,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'], $_POST['csr
         } else {
             $target_dir = 'Uploads/';
             if (!is_dir($target_dir)) {
-                mkdir($target_dir, 0777, true);
+                mkdir($target_dir, 0755, true);
             }
             $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
-            $target_file = $target_dir . uniqid() . '.' . $ext;
-            if (move_uploaded_file($file['tmp_name'], $target_file)) {
-                $profile_picture = $target_file;
-            } else {
+            $target_file = $target_dir . uniqid('emp_', true) . '.' . $ext;
+            if (!move_uploaded_file($file['tmp_name'], $target_file)) {
                 $error_message = 'Error uploading profile picture.';
+            } else {
+                $profile_picture = $target_file;
             }
         }
     }
@@ -163,22 +165,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'], $_POST['csr
 
             if ($create_account) {
                 $hashed_password = password_hash($account_password, PASSWORD_BCRYPT);
-                $stmt = $pdo->prepare("INSERT INTO users (username, email, password, role, employee_id) VALUES (?, ?, ?, ?, ?)");
-                $stmt->execute([$account_username, $email, $hashed_password, $role, $employee_id]);
+                $stmt = $pdo->prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)");
+                $stmt->execute([$account_username, $email, $hashed_password, $role]);
             }
 
             $pdo->commit();
-            $success_message = 'Employee added successfully!' . ($create_account ? ' Account created successfully!' : '');
+            $success_message = 'Employee added successfully!' . ($create_account ? ' Account created.' : '');
             error_log("Employee added: ID=$employee_id, Email=$email, AccountCreated=" . ($create_account ? 'Yes' : 'No'));
             unset($_SESSION['form_data']);
+            $_SESSION['success_message'] = $success_message;
+            header('Location: ' . $_SERVER['PHP_SELF']);
+            exit();
         } catch (Exception $e) {
             $pdo->rollBack();
-            $error_message = 'Failed to save employee data. Please try again.';
+            $error_message = 'Failed to save employee data: ' . $e->getMessage();
             error_log("Employee addition failed: " . $e->getMessage());
         }
     }
 
-    $_SESSION['success_message'] = $success_message;
     $_SESSION['error_message'] = $error_message;
     header('Location: ' . $_SERVER['PHP_SELF']);
     exit();
@@ -206,10 +210,10 @@ function generateUsernameSuggestions($first_name, $last_name) {
         substr($first_name, 0, 1) . $last_name,
         $first_name . substr($last_name, 0, 1),
         substr($first_name, 0, 3) . substr($last_name, 0, 3),
+        $first_name . $last_name . rand(10, 99),
+        $first_name . rand(10, 99),
+        $last_name . rand(10, 99)
     ];
-    for ($i = 0; $i < 3; $i++) {
-        $suggestions[] = $first_name . $last_name . rand(10, 99);
-    }
     return array_unique($suggestions);
 }
 
@@ -255,7 +259,6 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             line-height: 1.6;
         }
 
-        /* Reverted Sidebar Styles */
         .sidebar {
             width: 260px;
             background: linear-gradient(135deg, var(--primary), var(--primary-light));
@@ -327,7 +330,6 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             font-size: 18px;
         }
 
-        /* Main Content Styles */
         .main-content {
             flex: 1;
             padding: 32px;
@@ -717,7 +719,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                                         <div class="form-group">
                                             <label for="first_name">First Name <span class="text-danger">*</span></label>
                                             <i class="fas fa-user"></i>
-                                            <input type="text" id="first_name" name="first_name" class="form-control" required pattern="[A-Za-z\s'-]{2,50}" aria-describedby="firstNameError" value="<?php echo htmlspecialchars($form_data['first_name'] ?? ''); ?>" title="2-50 characters, letters, spaces, hyphens, or apostrophes">
+                                            <input type="text" id="first_name" name="first_name" class="form-control" required pattern="[A-Za-z\s'\-]{2,50}" aria-describedby="firstNameError" value="<?php echo htmlspecialchars($form_data['first_name'] ?? ''); ?>" title="2-50 characters, letters, spaces, hyphens, or apostrophes">
                                             <div id="firstNameError" class="form-error"></div>
                                         </div>
                                     </div>
@@ -725,7 +727,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                                         <div class="form-group">
                                             <label for="last_name">Last Name <span class="text-danger">*</span></label>
                                             <i class="fas fa-user"></i>
-                                            <input type="text" id="last_name" name="last_name" class="form-control" required pattern="[A-Za-z\s'-]{2,50}" aria-describedby="lastNameError" value="<?php echo htmlspecialchars($form_data['last_name'] ?? ''); ?>" title="2-50 characters, letters, spaces, hyphens, or apostrophes">
+                                            <input type="text" id="last_name" name="last_name" class="form-control" required pattern="[A-Za-z\s'\-]{2,50}" aria-describedby="lastNameError" value="<?php echo htmlspecialchars($form_data['last_name'] ?? ''); ?>" title="2-50 characters, letters, spaces, hyphens, or apostrophes">
                                             <div id="lastNameError" class="form-error"></div>
                                         </div>
                                     </div>
@@ -851,7 +853,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                                             <div class="form-group">
                                                 <label for="account_password">Password <span class="text-danger">*</span></label>
                                                 <i class="fas fa-lock"></i>
-                                                <input type="password" id="account_password" name="account_password" class="form-control" <?php echo $create_account ? 'required' : ''; ?> aria-describedby="passwordError">
+                                                <input type="password" id="account_password" name="account_password" class="form-control" autocomplete="new-password" <?php echo $create_account ? 'required' : ''; ?> aria-describedby="passwordError">
                                                 <div id="passwordError" class="form-error"></div>
                                             </div>
                                         </div>
@@ -862,7 +864,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                                                 <select id="role" name="role" class="form-control" <?php echo $create_account ? 'required' : ''; ?> aria-describedby="roleError">
                                                     <option value="">Select Role</option>
                                                     <option value="HR" <?php echo ($form_data['role'] ?? '') === 'HR' ? 'selected' : ''; ?>>HR</option>
-                                                    <option value="Employee|Employee" <?php echo ($form_data['role'] ?? '') === 'Employee' ? 'selected' : ''; ?>>Employee</option>
+                                                    <option value="Employee" <?php echo ($form_data['role'] ?? '') === 'Employee' ? 'selected' : ''; ?>>Employee</option>
                                                 </select>
                                                 <div id="roleError" class="form-error"></div>
                                             </div>
@@ -922,23 +924,27 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
         // Initialize Form
         function initForm() {
             const form = document.getElementById('employeeForm');
-            const inputs = form.querySelectorAll('input, textarea, select');
-            
-            // Persist Form Data in localStorage
-            inputs.forEach(input => {
-                const saved = localStorage.getItem(`employeeForm_${input.id}`);
-                if (saved) input.value = saved;
-                input.addEventListener('input', () => localStorage.setItem(`employeeForm_${input.id}`, input.value));
-            });
-
-            // Toggle Account Fields
             const createAccountToggle = document.getElementById('create_account_toggle');
             const accountFields = document.getElementById('account_fields');
-            createAccountToggle.addEventListener('change', () => {
-                accountFields.style.display = createAccountToggle.checked ? 'block' : 'none';
-                const accountInputs = accountFields.querySelectorAll('input, select');
-                accountInputs.forEach(input => input.required = createAccountToggle.checked);
-            });
+            const accountInputs = accountFields.querySelectorAll('input, select');
+
+            // Toggle Account Fields
+            function toggleAccountFields() {
+                const isChecked = createAccountToggle.checked;
+                accountFields.style.display = isChecked ? 'block' : 'none';
+                accountInputs.forEach(input => {
+                    input.required = isChecked;
+                    if (!isChecked) {
+                        input.value = ''; // Clear values when toggled off
+                        input.classList.remove('is-invalid');
+                        const errorDiv = document.getElementById(input.id + 'Error');
+                        if (errorDiv) errorDiv.textContent = '';
+                    }
+                });
+            }
+
+            createAccountToggle.addEventListener('change', toggleAccountFields);
+            toggleAccountFields(); // Initialize state
 
             // Form Submission Validation
             form.addEventListener('submit', (e) => {
@@ -1097,6 +1103,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             const lastName = document.getElementById('last_name');
             const usernameInput = document.getElementById('account_username');
             const suggestionsContainer = document.getElementById('usernameSuggestions');
+            let abortController = null;
 
             function generateSuggestions() {
                 const first = firstName.value.trim().toLowerCase();
@@ -1110,21 +1117,36 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                     first + last.charAt(0),
                     first.substr(0, 3) + last.substr(0, 3),
                     first + last + Math.floor(Math.random() * 90 + 10),
-                    first.charAt(0) + last + Math.floor(Math.random() * 90 + 10)
+                    first + Math.floor(Math.random() * 90 + 10),
+                    last + Math.floor(Math.random() * 90 + 10)
                 ];
 
                 return [...new Set(suggestions)];
             }
 
             async function checkUsernameAvailability(username) {
-                const response = await fetch(`?action=check_username&username=${encodeURIComponent(username)}&csrf_token=<?php echo $_SESSION['csrf_token']; ?>`);
-                const data = await response.json();
-                return data.available;
+                if (abortController) {
+                    abortController.abort(); // Cancel previous request
+                }
+                abortController = new AbortController();
+                try {
+                    const response = await fetch(`?action=check_username&username=${encodeURIComponent(username)}&csrf_token=<?php echo $_SESSION['csrf_token']; ?>`, {
+                        signal: abortController.signal
+                    });
+                    const data = await response.json();
+                    return data.available;
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        return false; // Request was aborted
+                    }
+                    console.error('Error checking username:', error);
+                    return false;
+                }
             }
 
             const updateSuggestions = debounce(async () => {
-                const suggestions = generateSuggestions();
                 suggestionsContainer.innerHTML = '';
+                const suggestions = generateSuggestions();
                 for (const suggestion of suggestions.slice(0, 5)) {
                     const isAvailable = await checkUsernameAvailability(suggestion);
                     const span = document.createElement('span');
@@ -1215,4 +1237,4 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
         });
     </script>
 </body>
-</html>
+</html>     

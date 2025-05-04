@@ -188,10 +188,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             --gray: #E5E5E5;
             --border-radius: 12px;
             --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.15);
+            --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.15);
             --transition: all 0.3s ease;
             --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0.3);
-            --gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
         }
 
         * {
@@ -212,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         /* Sidebar Styles */
         .sidebar {
             width: 260px;
-            background: var(--gradient);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: var(--white);
             box-shadow: var(--shadow);
             transition: var(--transition);
@@ -273,7 +272,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .toggle-btn:hover {
             color: var(--white);
-            transform: scale(1.1);
         }
 
         .sidebar-menu {
@@ -287,11 +285,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             color: var(--white);
             text-decoration: none;
             transition: var(--transition);
+            font-size: 14px;
+            font-weight: 500;
         }
 
         .menu-item:hover {
             background-color: var(--primary-light);
-            transform: translateX(5px);
         }
 
         .menu-item.active {
@@ -302,14 +301,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .menu-item i {
             margin-right: 12px;
             font-size: 18px;
+            width: 20px;
+            text-align: center;
         }
 
         .menu-badge {
-            background: var(--error);
-            color: var(--white);
-            border-radius: 50%;
-            padding: 2px 8px;
             margin-left: auto;
+            background-color: var(--error);
+            color: var(--white);
+            border-radius: 10px;
+            padding: 2px 8px;
             font-size: 12px;
             font-weight: 600;
         }
@@ -317,9 +318,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         /* Main Content Styles */
         .main-content {
             flex: 1;
-            overflow-y: auto;
             padding-bottom: 60px;
-            background-color: var(--white);
+            background: var(--white);
+            min-height: 100vh;
         }
 
         /* Header Styles */
@@ -328,7 +329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             justify-content: space-between;
             align-items: center;
             padding: 20px 30px;
-            background: var(--white);
+            background-color: var(--white);
             box-shadow: var(--shadow);
             position: sticky;
             top: 0;
@@ -337,7 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .header-title h1 {
             font-family: 'Poppins', sans-serif;
-            font-size: 28px;
+            font-size: 26px;
             color: var(--primary);
             margin-bottom: 5px;
         }
@@ -356,6 +357,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .current-time {
             font-size: 14px;
             color: var(--text-light);
+            font-weight: 500;
         }
 
         .user-profile {
@@ -364,102 +366,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         }
 
         .user-avatar {
-            width: 44px;
-            height: 44px;
-            background: var(--gradient);
+            width: 42px;
+            height: 42px;
+            background: var(--primary);
             color: var(--white);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-right: 10px;
-            font-weight: 600;
             font-size: 16px;
-            box-shadow: var(--shadow);
+            font-weight: 600;
+            margin-right: 10px;
+        }
+
+        .user-profile span {
+            font-size: 14px;
+            font-weight: 500;
         }
 
         /* Content Styles */
         .content {
-            max-width: 1200px;
-            margin: 40px auto;
+            max-width: 1000px;
+            margin: 24px auto;
             padding: 0 30px;
         }
 
         .personal-section {
             background: var(--white);
             border-radius: var(--border-radius);
-            padding: 30px;
+            padding: 24px;
             box-shadow: var(--shadow);
             transition: var(--transition);
         }
 
         .personal-section:hover {
             box-shadow: var(--shadow-hover);
-            transform: translateY(-4px);
         }
 
         .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
             border-bottom: 1px solid var(--gray);
-            padding-bottom: 10px;
         }
 
         .section-title {
             font-family: 'Poppins', sans-serif;
-            font-size: 24px;
-            color: var(--primary);
+            font-size: 20px;
             font-weight: 600;
+            color: var(--primary);
         }
 
         .profile-info-container {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 24px;
-            margin-bottom: 30px;
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
         .profile-card {
-            background: linear-gradient(135deg, var(--light) 0%, var(--white) 100%);
+            background: var(--white);
+            border: 1px solid var(--gray);
             border-radius: var(--border-radius);
-            padding: 20px;
-            box-shadow: var(--shadow);
+            padding: 16px;
             transition: var(--transition);
         }
 
         .profile-card:hover {
+            border-color: var(--primary-light);
             box-shadow: var(--shadow-hover);
-            transform: translateY(-2px);
         }
 
         .profile-card h5 {
-            font-family: 'Poppins', sans-serif;
-            font-size: 18px;
+            font-size: 16px;
+            font-weight: 600;
             color: var(--primary);
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             display: flex;
             align-items: center;
+            gap: 8px;
         }
 
         .profile-card p {
             font-size: 14px;
             color: var(--text);
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
         }
 
         .profile-card p strong {
             color: var(--text-light);
             font-weight: 500;
-            margin-right: 8px;
+            flex: 0 0 40%;
         }
 
         .form-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 24px;
-            margin-bottom: 30px;
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
         .form-group {
@@ -473,14 +481,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .form-label {
             font-size: 14px;
+            font-weight: 500;
             color: var(--text);
-            font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .form-control {
             width: 100%;
-            padding: 12px;
+            padding: 10px 12px;
             border: 1px solid var(--gray);
             border-radius: var(--border-radius);
             font-size: 14px;
@@ -492,98 +500,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             outline: none;
             border-color: var(--secondary);
             box-shadow: var(--focus-ring);
-            background: rgba(191, 162, 219, 0.05);
         }
 
         .form-control:invalid:focus {
             border-color: var(--error);
-            box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.3);
+            box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.2);
         }
 
         textarea.form-control {
-            min-height: 120px;
+            min-height: 100px;
             resize: vertical;
         }
 
         .btn {
-            padding: 14px 24px;
+            padding: 10px 18px;
             border-radius: var(--border-radius);
             font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
             transition: var(--transition);
-            font-weight: 600;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
+            gap: 8px;
         }
 
         .btn-primary {
-            background: var(--gradient);
+            background: var(--primary);
             color: var(--white);
             border: none;
-            box-shadow: var(--shadow);
-            position: relative;
-            overflow: hidden;
         }
 
         .btn-primary:hover {
             background: var(--primary-light);
             box-shadow: var(--shadow-hover);
-            transform: translateY(-2px);
-        }
-
-        .btn-primary::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 0;
-            height: 0;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            transition: width 0.6s ease, height 0.6s ease;
-        }
-
-        .btn-primary:hover::before {
-            width: 200px;
-            height: 200px;
         }
 
         .alert-success,
         .alert-error {
-            padding: 20px;
+            padding: 12px 16px;
             border-radius: var(--border-radius);
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             display: flex;
             align-items: center;
-            font-size: 16px;
-            animation: fadeIn 0.5s ease;
-            box-shadow: var(--shadow);
+            font-size: 14px;
+            animation: fadeIn 0.3s ease;
+            border-left: 4px solid;
         }
 
         .alert-success {
-            background: rgba(75, 181, 67, 0.15);
+            background: rgba(75, 181, 67, 0.1);
             color: var(--success);
-            border: 1px solid rgba(75, 181, 67, 0.3);
+            border-color: var(--success);
         }
 
         .alert-error {
-            background: rgba(255, 107, 107, 0.15);
+            background: rgba(255, 107, 107, 0.1);
             color: var(--error);
-            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-color: var(--error);
         }
 
         .alert-success i,
         .alert-error i {
-            margin-right: 12px;
-            font-size: 20px;
+            margin-right: 8px;
+            font-size: 16px;
         }
 
         .password-section {
             grid-column: span 2;
-            margin-top: 30px;
-            padding-top: 20px;
+            margin-top: 24px;
+            padding-top: 16px;
             border-top: 1px solid var(--gray);
         }
 
@@ -592,59 +577,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         }
 
         .password-field .form-control {
-            padding-right: 40px; /* Space for the eye icon */
-            border: 2px solid var(--gray);
-            background: var(--white);
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
-            transition: var(--transition);
-        }
-
-        .password-field .form-control:focus {
-            border-color: var(--secondary);
-            box-shadow: var(--focus-ring), inset 0 2px 4px rgba(0, 0, 0, 0.05);
-            background: var(--white);
+            padding-right: 36px;
         }
 
         .password-toggle {
             position: absolute;
-            right: 12px;
+            right: 8px;
             top: 50%;
             transform: translateY(-50%);
             background: none;
             border: none;
             color: var(--text-light);
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
             padding: 8px;
-            transition: var(--transition);
         }
 
         .password-toggle:hover {
             color: var(--primary);
         }
 
-        .password-toggle i {
-            display: block;
-        }
-
         .form-text {
             font-size: 12px;
             color: var(--text-light);
-            margin-top: 5px;
+            margin-top: 4px;
         }
 
-        /* Checkbox Styling */
-        .password-section .form-group {
-            display: flex;
+        .password-section .form-group.checkbox {
             flex-direction: row;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
+            margin-bottom: 16px;
         }
 
         .password-section input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            margin: 0;
+            width: 16px;
+            height: 16px;
             cursor: pointer;
             accent-color: var(--primary);
             border-radius: 4px;
@@ -653,26 +621,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .password-section .form-label {
             margin-bottom: 0;
             cursor: pointer;
+            font-weight: 500;
         }
 
-        /* Flatpickr Custom Styles */
         .flatpickr-calendar {
             background: var(--white);
             border: 1px solid var(--gray);
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
-            font-family: 'Outfit', sans-serif;
         }
 
         .flatpickr-month {
             color: var(--text);
-            font-family: 'Poppins', sans-serif;
             font-weight: 600;
         }
 
         .flatpickr-weekdays {
             border-bottom: 1px solid var(--gray);
-            padding-bottom: 8px;
         }
 
         .flatpickr-weekday {
@@ -683,12 +648,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .flatpickr-day {
             border-radius: var(--border-radius);
             color: var(--text);
-            transition: var(--transition);
         }
 
         .flatpickr-day:hover {
             background: var(--light);
-            box-shadow: var(--shadow);
         }
 
         .flatpickr-day.selected,
@@ -702,7 +665,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .flatpickr-day.today {
             background: var(--secondary);
             color: var(--white);
-            font-weight: 600;
         }
 
         .flatpickr-day.disabled,
@@ -715,7 +677,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .flatpickr-prev-month,
         .flatpickr-next-month {
             color: var(--text-light);
-            border-radius: var(--border-radius);
         }
 
         .flatpickr-prev-month:hover,
@@ -724,21 +685,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             background: var(--light);
         }
 
-        .numInputWrapper input {
-            border: 1px solid var(--gray);
-            border-radius: var(--border-radius);
-            padding: 5px;
-        }
-
-        .flatpickr-current-month .numInputWrapper span.arrowUp::after,
-        .flatpickr-current-month .numInputWrapper span.arrowDown::after {
-            border-top-color: var(--text);
-        }
-
         .age-validation {
             font-size: 12px;
             color: var(--error);
-            margin-top: 5px;
+            margin-top: 4px;
             display: none;
         }
 
@@ -746,21 +696,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             display: block;
         }
 
-        /* Notification Styles */
         .update-notification {
             position: fixed;
-            bottom: 30px;
-            right: 30px;
+            bottom: 20px;
+            right: 20px;
             background: var(--white);
-            padding: 20px 25px;
+            padding: 15px 20px;
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
             display: flex;
             align-items: center;
             z-index: 1000;
-            animation: slideIn 0.5s ease-out;
+            animation: slideIn 0.3s ease-out;
             border-left: 4px solid var(--primary);
-            min-width: 300px;
+            max-width: 400px;
         }
 
         @keyframes slideIn {
@@ -775,12 +724,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .update-notification i {
             color: var(--primary);
-            margin-right: 12px;
-            font-size: 20px;
+            margin-right: 10px;
+            font-size: 18px;
         }
 
         .update-notification span {
-            margin-right: 15px;
             font-size: 14px;
             flex: 1;
         }
@@ -788,19 +736,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .close-notification {
             background: none;
             border: none;
-            font-size: 20px;
+            font-size: 18px;
             cursor: pointer;
             color: var(--text-light);
-            transition: var(--transition);
         }
 
         .close-notification:hover {
             color: var(--primary);
-            transform: scale(1.1);
         }
 
         /* Responsive Styles */
-        @media (max-width: 1400px) {
+        @media (max-width: 1200px) {
             .profile-info-container {
                 grid-template-columns: 1fr;
             }
@@ -812,16 +758,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             }
             .password-section {
                 grid-column: span 1;
-            }
-        }
-
-        @media (max-width: 992px) {
-            .content {
-                padding: 0 20px;
-                margin: 20px auto;
-            }
-            .personal-section {
-                padding: 20px;
             }
         }
 
@@ -850,10 +786,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 width: 100%;
                 justify-content: space-between;
             }
-            .section-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 10px;
+            .content {
+                padding: 0 12px;
+                margin: 16px auto;
+            }
+            .personal-section {
+                padding: 16px;
+            }
+            .update-notification {
+                max-width: 90%;
+                bottom: 12px;
+                right: 12px;
             }
         }
 
@@ -920,14 +863,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 <div class="current-time" id="currentTime">
                     <?php 
                     date_default_timezone_set('Asia/Manila');
-                    echo date('l, F j, Y g:i A'); 
+                    echo date('h:i A'); 
                     ?>
                 </div>
                 <div class="user-profile">
                     <div class="user-avatar">
                         <?php 
-                        $initials = substr($user['username'] ?? '', 0, 2) ?: 'UK';
-                        echo htmlspecialchars($initials);
+                        $initials = substr($user['username'] ?? '', 0, 1) ?: 'U';
+                        echo htmlspecialchars(strtoupper($initials));
                         ?>
                     </div>
                     <span><?php echo htmlspecialchars($user['username'] . ' - ' . ucfirst($user['role'])); ?></span>
@@ -959,12 +902,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 <!-- Profile Information -->
                 <div class="profile-info-container">
                     <div class="profile-card">
-                        <h5><i class="fas fa-id-card me-2"></i>Account Details</h5>
+                        <h5><i class="fas fa-id-card"></i> Account Details</h5>
                         <p><strong>Username:</strong> <?php echo htmlspecialchars($user['username']); ?></p>
                         <p><strong>Role:</strong> <?php echo htmlspecialchars(ucfirst($user['role'])); ?></p>
                     </div>
                     <div class="profile-card">
-                        <h5><i class="fas fa-briefcase me-2"></i>Employment Info</h5>
+                        <h5><i class="fas fa-briefcase"></i> Employment Info</h5>
                         <p><strong>Department:</strong> <?php echo htmlspecialchars($user['department']); ?></p>
                         <p><strong>Position:</strong> <?php echo htmlspecialchars($user['position']); ?></p>
                         <p><strong>Hire Date:</strong> <?php echo htmlspecialchars($user['hire_date']); ?></p>
@@ -1001,7 +944,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                             <textarea class="form-control" id="address" name="address" rows="4" required aria-required="true"><?php echo htmlspecialchars($user['address']); ?></textarea>
                         </div>
                         <div class="password-section">
-                            <div class="form-group">
+                            <div class="form-group checkbox">
                                 <input type="checkbox" id="changePassword" aria-controls="passwordFields">
                                 <label for="changePassword" class="form-label">Change Password</label>
                             </div>
@@ -1036,7 +979,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                     </div>
                     <div class="form-group">
                         <button type="submit" class="btn btn-primary" aria-label="Save changes">
-                            <i class="fas fa-save me-2"></i>Save Changes
+                            <i class="fas fa-save"></i> Save Changes
                         </button>
                     </div>
                 </form>
@@ -1053,6 +996,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         // Sidebar Toggle
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('collapsed');
+            this.querySelector('i').classList.toggle('fa-chevron-left');
+            this.querySelector('i').classList.toggle('fa-chevron-right');
         });
 
         // Current Time Update
@@ -1060,10 +1005,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             const timeElement = document.getElementById('currentTime');
             const now = new Date();
             timeElement.textContent = now.toLocaleString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
                 hour: 'numeric',
                 minute: 'numeric',
                 hour12: true

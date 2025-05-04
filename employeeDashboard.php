@@ -1,5 +1,4 @@
 <?php
-
 // Start the session with secure settings
 session_set_cookie_params([
     'lifetime' => 0,
@@ -59,9 +58,47 @@ if (!$currentUser) {
     exit();
 }
 
-// Fetch announcements
-$announcementsStmt = $pdo->query("SELECT message, created_at FROM announcements ORDER BY created_at DESC LIMIT 1");
-$latestAnnouncement = $announcementsStmt->fetch(PDO::FETCH_ASSOC);
+// Fetch announcements (limited to 5 for display)
+$announcementsStmt = $pdo->query("
+    SELECT id, title, message, created_at 
+    FROM announcements 
+    ORDER BY created_at DESC 
+    LIMIT 5
+");
+$announcements = $announcementsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Handle announcement creation (admin only)
+$announcementSuccess = null;
+$announcementError = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_announcement']) && $currentUser['role'] === 'admin') {
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $announcementError = "Invalid CSRF token.";
+    } else {
+        $title = filter_var($_POST['announcement_title'], FILTER_SANITIZE_STRING);
+        $message = filter_var($_POST['announcement_message'], FILTER_SANITIZE_STRING);
+
+        if (empty($title) || empty($message)) {
+            $announcementError = "Title and message are required.";
+        } else {
+            $insertStmt = $pdo->prepare("
+                INSERT INTO announcements (title, message, created_at)
+                VALUES (?, ?, NOW())
+            ");
+            try {
+                if ($insertStmt->execute([$title, $message])) {
+                    $announcementSuccess = "Announcement posted successfully!";
+                    header('Location: Employeedashboard.php');
+                    exit();
+                } else {
+                    $announcementError = "Failed to post announcement.";
+                }
+            } catch (PDOException $e) {
+                error_log("Announcement insert failed: " . $e->getMessage());
+                $announcementError = "Failed to post announcement.";
+            }
+        }
+    }
+}
 
 // Fetch time off data
 $timeOffStmt = $pdo->prepare("
@@ -385,46 +422,99 @@ $philippineHolidays = [
         margin: 0 auto;
     }
 
-    /* Announcement Banner */
-    .announcement-banner {
+    /* Announcement Section */
+    .announcement-section {
         grid-column: 1 / -1;
-        background-color: var(--light);
+        background-color: var(--white);
         border-radius: var(--border-radius);
-        padding: 20px;
-        display: flex;
-        align-items: center;
+        padding: 24px;
         box-shadow: var(--shadow);
         transition: var(--transition);
     }
 
-    .announcement-banner:hover {
+    .announcement-section:hover {
         box-shadow: var(--shadow-hover);
+    }
+
+    .announcement-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .announcement-title {
+        font-family: 'Poppins', sans-serif;
+        font-size: 20px;
+        color: var(--primary);
+        font-weight: 600;
+    }
+
+    .announcement-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .announcement-item {
+        background-color: var(--light);
+        border-radius: var(--border-radius);
+        padding: 16px;
+        transition: var(--transition);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .announcement-item:hover {
         transform: translateY(-2px);
+        box-shadow: var(--shadow-hover);
     }
 
     .announcement-icon {
         font-size: 24px;
         color: var(--primary);
-        margin-right: 15px;
+        flex-shrink: 0;
     }
 
-    .announcement-text h3 {
+    .announcement-content {
+        flex: 1;
+    }
+
+    .announcement-content h3 {
         font-family: 'Poppins', sans-serif;
         font-size: 18px;
         color: var(--text);
-        margin-bottom: 5px;
+        margin-bottom: 8px;
     }
 
-    .announcement-text p {
+    .announcement-content p {
         font-size: 14px;
         color: var(--text-light);
-        max-width: 80%;
+        margin-bottom: 8px;
     }
 
-    .announcement-banner i.fas.fa-chevron-right {
-        margin-left: auto;
+    .announcement-content small {
+        font-size: 12px;
         color: var(--text-light);
+    }
+
+    .announcement-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .announcement-action-btn {
+        background: none;
+        border: none;
         font-size: 16px;
+        color: var(--text-light);
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .announcement-action-btn:hover {
+        color: var(--primary);
     }
 
     /* Stats Cards */
@@ -467,24 +557,9 @@ $philippineHolidays = [
         font-size: 20px;
     }
 
-    .stats-icon.payroll {
-        background-color: rgba(75, 63, 114, 0.15);
-        color: var(--primary);
-    }
-
-    .stats-icon.employees {
-        background-color: rgba(75, 181, 67, 0.15);
-        color: var(--success);
-    }
-
     .stats-icon.days {
         background-color: rgba(191, 162, 219, 0.15);
         color: var(--secondary);
-    }
-
-    .stats-icon.processed {
-        background-color: rgba(255, 107, 107, 0.15);
-        color: var(--error);
     }
 
     .stats-value {
@@ -500,10 +575,6 @@ $philippineHolidays = [
         display: flex;
         align-items: center;
         gap: 5px;
-    }
-
-    .stats-change.negative {
-        color: var(--error);
     }
 
     /* Calendar Section */
@@ -737,12 +808,6 @@ $philippineHolidays = [
         transition: width 0.5s ease;
     }
 
-    .timeoff-actions {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-
     /* Timesheets Section */
     .timesheets-section {
         grid-column: span 8;
@@ -939,10 +1004,13 @@ $philippineHolidays = [
         background-color: var(--white);
         border-radius: var(--border-radius);
         width: 100%;
-        max-width: 400px;
+        max-width: 500px;
+        max-height: 80vh;
         box-shadow: var(--shadow);
         transform: translateY(-20px);
         transition: var(--transition);
+        display: flex;
+        flex-direction: column;
     }
 
     .holiday-modal.active .holiday-modal-content {
@@ -955,6 +1023,10 @@ $philippineHolidays = [
         display: flex;
         justify-content: space-between;
         align-items: center;
+        position: sticky;
+        top: 0;
+        background-color: var(--white);
+        z-index: 10;
     }
 
     .holiday-modal-title {
@@ -978,21 +1050,32 @@ $philippineHolidays = [
 
     .holiday-modal-body {
         padding: 20px;
+        overflow-y: auto;
+        flex: 1;
     }
 
     .holiday-info {
-        margin-bottom: 15px;
+        margin-bottom: 12px;
+        padding: 12px;
+        border-radius: var(--border-radius);
+        background-color: var(--light);
+        transition: var(--transition);
+    }
+
+    .holiday-info:hover {
+        background-color: rgba(191, 162, 219, 0.1);
     }
 
     .holiday-info-label {
         font-size: 14px;
         color: var(--text-light);
-        margin-bottom: 5px;
+        margin-bottom: 4px;
     }
 
     .holiday-info-value {
         font-size: 16px;
         color: var(--text);
+        font-weight: 500;
     }
 
     .holiday-badge {
@@ -1000,10 +1083,7 @@ $philippineHolidays = [
         padding: 4px 10px;
         border-radius: var(--border-radius);
         font-size: 12px;
-        margin-top: 5px;
-    }
-
-    .holiday-badge.regular {
+        margin-top: 6px;
         background-color: rgba(191, 162, 219, 0.2);
         color: var(--secondary);
     }
@@ -1013,6 +1093,9 @@ $philippineHolidays = [
         border-top: 1px solid var(--gray);
         display: flex;
         justify-content: flex-end;
+        position: sticky;
+        bottom: 0;
+        background-color: var(--white);
     }
 
     /* Notification Styles */
@@ -1120,6 +1203,14 @@ $philippineHolidays = [
             grid-template-columns: 1fr 1fr;
             gap: 8px;
         }
+        .announcement-item {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .holiday-modal-content {
+            max-width: 90%;
+            max-height: 90vh;
+        }
     }
 
     /* Alert Styles */
@@ -1179,7 +1270,7 @@ $philippineHolidays = [
                     <span class="menu-badge"><?php echo $unreadMessages; ?></span>
                 <?php endif; ?>
             </a>
-            <a href="login.html" class="menu-item">
+            <a href="login.php" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>
             </a>
@@ -1205,62 +1296,73 @@ $philippineHolidays = [
 
         <!-- Dashboard Grid -->
         <div class="dashboard-grid">
-            <!-- Announcement Banner -->
-            <?php if ($latestAnnouncement): ?>
-                <div class="announcement-banner">
-                    <i class="fas fa-bullhorn announcement-icon"></i>
-                    <div class="announcement-text">
-                        <h3>Latest Announcement</h3>
-                        <p><?php echo htmlspecialchars($latestAnnouncement['message']); ?> <br><small><?php echo date('F j, Y, g:i a', strtotime($latestAnnouncement['created_at'])); ?></small></p>
-                    </div>
-                    <i class="fas fa-chevron-right"></i>
+            <!-- Announcement Section -->
+            <div class="announcement-section">
+                <div class="announcement-header">
+                    <h2 class="announcement-title">Announcements</h2>
+                    <?php if ($currentUser['role'] === 'admin'): ?>
+                        <button class="btn btn-primary" id="openAnnouncementModal">Post Announcement</button>
+                    <?php endif; ?>
                 </div>
-            <?php endif; ?>
+                <div class="announcement-list">
+                    <?php if (empty($announcements)): ?>
+                        <p>No announcements available.</p>
+                    <?php else: ?>
+                        <?php foreach ($announcements as $announcement): ?>
+                            <div class="announcement-item">
+                                <i class="fas fa-bullhorn announcement-icon"></i>
+                                <div class="announcement-content">
+                                    <h3><?php echo htmlspecialchars($announcement['title']); ?></h3>
+                                    <p><?php echo htmlspecialchars($announcement['message']); ?></p>
+                                    <small><?php echo date('F j, Y, g:i a', strtotime($announcement['created_at'])); ?></small>
+                                </div>
+                                <div class="announcement-actions">
+                                    <button class="announcement-action-btn"><i class="fas fa-eye"></i></button>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
 
             <!-- Stats Cards -->
             <div class="stats-card">
                 <div class="stats-header">
-                    <span class="stats-title">Vacation Days Used</span>
+                    <h3 class="stats-title">Vacation Days Used</h3>
                     <div class="stats-icon days"><i class="fas fa-umbrella-beach"></i></div>
                 </div>
-                <div class="stats-value"><?php echo $timeOffData['vacation_days'] ?? 0; ?> / 15</div>
-                <div class="stats-change">
-                    <i class="fas fa-arrow-up"></i> <?php echo $timeOffData['vacation_days'] ?? 0; ?> days this year
-                </div>
+                <div class="stats-value"><?php echo (int)($timeOffData['vacation_days'] ?? 0); ?></div>
+                <div class="stats-change"><i class="fas fa-arrow-up"></i> Days this year</div>
             </div>
             <div class="stats-card">
                 <div class="stats-header">
-                    <span class="stats-title">Sick Days Used</span>
+                    <h3 class="stats-title">Sick Days Used</h3>
                     <div class="stats-icon days"><i class="fas fa-briefcase-medical"></i></div>
                 </div>
-                <div class="stats-value"><?php echo $timeOffData['sick_days'] ?? 0; ?> / 7</div>
-                <div class="stats-change">
-                    <i class="fas fa-arrow-up"></i> <?php echo $timeOffData['sick_days'] ?? 0; ?> days this year
-                </div>
+                <div class="stats-value"><?php echo (int)($timeOffData['sick_days'] ?? 0); ?></div>
+                <div class="stats-change"><i class="fas fa-arrow-up"></i> Days this year</div>
             </div>
             <div class="stats-card">
                 <div class="stats-header">
-                    <span class="stats-title">Personal Days Used</span>
+                    <h3 class="stats-title">Personal Days Used</h3>
                     <div class="stats-icon days"><i class="fas fa-user-clock"></i></div>
                 </div>
-                <div class="stats-value"><?php echo $timeOffData['personal_days'] ?? 0; ?> / 5</div>
-                <div class="stats-change">
-                    <i class="fas fa-arrow-up"></i> <?php echo $timeOffData['personal_days'] ?? 0; ?> days this year
-                </div>
+                <div class="stats-value"><?php echo (int)($timeOffData['personal_days'] ?? 0); ?></div>
+                <div class="stats-change"><i class="fas fa-arrow-up"></i> Days this year</div>
             </div>
 
             <!-- Calendar Section -->
             <div class="calendar-section">
                 <div class="section-header">
                     <h2 class="section-title">Calendar</h2>
-                    <button class="btn btn-outline" id="openHolidayModal">View Holidays</button>
+                    <button class="btn btn-outline" id="viewHolidays">View Holidays</button>
                 </div>
                 <div class="calendar-header">
                     <div class="calendar-nav">
                         <button class="calendar-nav-btn" id="prevMonth"><i class="fas fa-chevron-left"></i></button>
                         <button class="calendar-nav-btn" id="nextMonth"><i class="fas fa-chevron-right"></i></button>
                     </div>
-                    <div class="calendar-month" id="calendarMonth"></div>
+                    <div class="calendar-month" id="currentMonth"></div>
                 </div>
                 <div class="calendar-weekdays">
                     <div>Sun</div>
@@ -1277,68 +1379,75 @@ $philippineHolidays = [
             <!-- Time Off Section -->
             <div class="timeoff-section">
                 <div class="section-header">
-                    <h2 class="section-title">Time Off Balance</h2>
-                    <button class="btn btn-primary" id="openTimeOffModal">Request Time Off</button>
+                    <h2 class="section-title">Time Off</h2>
+                    <button class="btn btn-primary" id="requestTimeOff">Request Time Off</button>
                 </div>
                 <div class="timeoff-progress">
                     <div class="timeoff-type">
                         <span class="timeoff-name">Vacation</span>
-                        <span class="timeoff-days"><?php echo $timeOffData['vacation_days'] ?? 0; ?> / 15</span>
+                        <span class="timeoff-days"><?php echo (int)($timeOffData['vacation_days'] ?? 0); ?> / 15</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill" style="width: <?php echo (($timeOffData['vacation_days'] ?? 0) / 15) * 100; ?>%"></div>
+                        <div class="progress-fill" style="width: <?php echo min((($timeOffData['vacation_days'] ?? 0) / 15) * 100, 100); ?>%;"></div>
                     </div>
                     <div class="timeoff-type">
                         <span class="timeoff-name">Sick</span>
-                        <span class="timeoff-days"><?php echo $timeOffData['sick_days'] ?? 0; ?> / 7</span>
+                        <span class="timeoff-days"><?php echo (int)($timeOffData['sick_days'] ?? 0); ?> / 10</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill" style="width: <?php echo (($timeOffData['sick_days'] ?? 0) / 7) * 100; ?>%"></div>
+                        <div class="progress-fill" style="width: <?php echo min((($timeOffData['sick_days'] ?? 0) / 10) * 100, 100); ?>%;"></div>
                     </div>
                     <div class="timeoff-type">
                         <span class="timeoff-name">Personal</span>
-                        <span class="timeoff-days"><?php echo $timeOffData['personal_days'] ?? 0; ?> / 5</span>
+                        <span class="timeoff-days"><?php echo (int)($timeOffData['personal_days'] ?? 0); ?> / 5</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill" style="width: <?php echo (($timeOffData['personal_days'] ?? 0) / 5) * 100; ?>%"></div>
+                        <div class="progress-fill" style="width: <?php echo min((($timeOffData['personal_days'] ?? 0) / 5) * 100, 100); ?>%;"></div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Timesheets Section -->
-            <div class="timesheets-section">
-                <div class="section-header">
-                    <h2 class="section-title">Recent Timesheets</h2>
-                    <a href="timesheet.php" class="btn btn-outline">View All</a>
-                </div>
-                <div class="timesheet-list">
-                    <?php foreach ($recentTimesheets as $timesheet): ?>
-                        <div class="timesheet-item">
-                            <div class="timesheet-date"><?php echo date('M d, Y', strtotime($timesheet['date'])); ?></div>
-                            <div class="timesheet-time"><?php echo $timesheet['clock_in'] . ' - ' . $timesheet['clock_out']; ?></div>
-                            <div class="timesheet-time"><?php echo $timesheet['break_duration']; ?> min break</div>
-                            <div class="timesheet-time"><?php echo $timesheet['total_hours']; ?> hrs</div>
-                            <div class="timesheet-status <?php echo strtolower($timesheet['status']); ?>">
-                                <?php echo ucfirst($timesheet['status']); ?>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
                 </div>
             </div>
         </div>
     </main>
+
+    <!-- Announcement Modal -->
+    <?php if ($currentUser['role'] === 'admin'): ?>
+        <div class="modal" id="announcementModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title">Post New Announcement</h2>
+                    <button class="modal-close" id="closeAnnouncementModal">&times;</button>
+                </div>
+                <form id="announcementForm" method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                    <div class="form-group">
+                        <label for="announcement_title">Title</label>
+                        <input type="text" id="announcement_title" name="announcement_title" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="announcement_message">Message</label>
+                        <textarea id="announcement_message" name="announcement_message" class="form-control" required></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline" id="cancelAnnouncement">Cancel</button>
+                        <button type="submit" name="submit_announcement" class="btn btn-primary">Post</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <!-- Time Off Request Modal -->
     <div class="modal" id="timeOffModal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title">Request Time Off</h2>
-                <button class="modal-close" id="closeTimeOffModal">×</button>
+                <button class="modal-close" id="closeTimeOffModal">&times;</button>
             </div>
-            <form id="timeOffForm" action="" method="POST">
+            <form id="timeOffForm" method="POST">
+                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                 <div class="form-group">
                     <label for="leave_type">Leave Type</label>
-                    <select class="form-control" id="leave_type" name="leave_type" required>
+                    <select id="leave_type" name="leave_type" class="form-control" required>
                         <option value="vacation">Vacation</option>
                         <option value="sick">Sick</option>
                         <option value="personal">Personal</option>
@@ -1348,21 +1457,19 @@ $philippineHolidays = [
                 </div>
                 <div class="form-group">
                     <label for="start_date">Start Date</label>
-                    <input type="text" class="form-control flatpickr" id="start_date" name="start_date" required>
+                    <input type="text" id="start_date" name="start_date" class="form-control flatpickr" required>
                 </div>
                 <div class="form-group">
                     <label for="end_date">End Date</label>
-                    <input type="text" class="form-control flatpickr" id="end_date" name="end_date" required>
+                    <input type="text" id="end_date" name="end_date" class="form-control flatpickr" required>
                 </div>
                 <div class="form-group">
-                    <label for="notes">Notes</label>
-                    <textarea class="form-control" id="notes" name="notes"></textarea>
+                    <label for="notes">Notes (Optional)</label>
+                    <textarea id="notes" name="notes" class="form-control"></textarea>
                 </div>
-                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-                <input type="hidden" name="submit_time_off" value="1">
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline" id="cancelTimeOff">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                    <button type="submit" name="submit_time_off" class="btn btn-primary">Submit</button>
                 </div>
             </form>
         </div>
@@ -1373,165 +1480,207 @@ $philippineHolidays = [
         <div class="holiday-modal-content">
             <div class="holiday-modal-header">
                 <h2 class="holiday-modal-title">Philippine Holidays 2025</h2>
-                <button class="holiday-modal-close" id="closeHolidayModal">×</button>
+                <button class="holiday-modal-close" id="closeHolidayModal">&times;</button>
             </div>
             <div class="holiday-modal-body">
                 <?php foreach ($philippineHolidays as $holiday): ?>
                     <div class="holiday-info">
-                        <div class="holiday-info-label"><?php echo date('F j, Y', strtotime($holiday['date'])); ?></div>
+                        <div class="holiday-info-label">Date</div>
+                        <div class="holiday-info-value"><?php echo date('F j, Y', strtotime($holiday['date'])); ?></div>
+                        <div class="holiday-info-label">Holiday</div>
                         <div class="holiday-info-value"><?php echo htmlspecialchars($holiday['name']); ?></div>
-                        <span class="holiday-badge regular">Regular Holiday</span>
+                        <span class="holiday-badge">Non-Working Holiday</span>
                     </div>
                 <?php endforeach; ?>
             </div>
             <div class="holiday-modal-footer">
-                <button class="btn btn-outline" id="closeHolidayModalFooter">Close</button>
+                <button class="btn btn-primary" id="closeHolidayModalFooter">Close</button>
             </div>
         </div>
     </div>
 
     <!-- Notification -->
-    <?php if ($requestSuccess || $requestError): ?>
-        <div class="update-notification">
-            <i class="fas fa-<?php echo $requestSuccess ? 'check-circle' : 'exclamation-circle'; ?>"></i>
-            <span><?php echo htmlspecialchars($requestSuccess ?? $requestError); ?></span>
-            <button class="close-notification" id="closeNotification">×</button>
+    <?php if ($announcementSuccess || $announcementError): ?>
+        <div class="update-notification <?php echo $announcementSuccess ? 'alert-success' : 'alert-error'; ?>">
+            <i class="fas fa-<?php echo $announcementSuccess ? 'check-circle' : 'exclamation-circle'; ?>"></i>
+            <span><?php echo htmlspecialchars($announcementSuccess ?? $announcementError); ?></span>
+            <button class="close-notification" id="closeNotification">&times;</button>
         </div>
     <?php endif; ?>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script>
-        // Sidebar Toggle
+        // Update current time
+        function updateTime() {
+            const timeElement = document.getElementById('currentTime');
+            if (timeElement) {
+                const now = new Date();
+                timeElement.textContent = now.toLocaleString('en-US', {
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    hour12: true
+                });
+            }
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // Sidebar toggle
         const sidebar = document.querySelector('.sidebar');
-        const sidebarToggle = document.querySelector('#sidebarToggle');
+        const sidebarToggle = document.getElementById('sidebarToggle');
         sidebarToggle.addEventListener('click', () => {
             sidebar.classList.toggle('collapsed');
+            sidebarToggle.querySelector('i').classList.toggle('fa-chevron-left');
+            sidebarToggle.querySelector('i').classList.toggle('fa-chevron-right');
         });
 
-        // Current Time
-        function updateTime() {
-            const timeElement = document.querySelector('#currentTime');
-            const now = new Date();
-            timeElement.textContent = now.toLocaleString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric',
-                hour12: true
-            });
+        // Modal handling
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.add('active');
+                modal.querySelector('input, select, textarea')?.focus();
+            }
         }
-        updateTime();
-        setInterval(updateTime, 60000);
 
-        // Flatpickr Initialization
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        // Announcement modal
+        <?php if ($currentUser['role'] === 'admin'): ?>
+            document.getElementById('openAnnouncementModal')?.addEventListener('click', () => openModal('announcementModal'));
+            document.getElementById('closeAnnouncementModal')?.addEventListener('click', () => closeModal('announcementModal'));
+            document.getElementById('cancelAnnouncement')?.addEventListener('click', () => closeModal('announcementModal'));
+        <?php endif; ?>
+
+        // Time off modal
+        document.getElementById('requestTimeOff')?.addEventListener('click', () => openModal('timeOffModal'));
+        document.getElementById('closeTimeOffModal')?.addEventListener('click', () => closeModal('timeOffModal'));
+        document.getElementById('cancelTimeOff')?.addEventListener('click', () => closeModal('timeOffModal'));
+
+        // Holiday modal
+        document.getElementById('viewHolidays')?.addEventListener('click', () => openModal('holidayModal'));
+        document.getElementById('closeHolidayModal')?.addEventListener('click', () => closeModal('holidayModal'));
+        document.getElementById('closeHolidayModalFooter')?.addEventListener('click', () => closeModal('holidayModal'));
+
+        // Close modals on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal('announcementModal');
+                closeModal('timeOffModal');
+                closeModal('holidayModal');
+            }
+        });
+
+        // Notification handling
+        document.getElementById('closeNotification')?.addEventListener('click', (e) => {
+            e.target.closest('.update-notification').remove();
+        });
+
+        // Flatpickr initialization
         flatpickr('.flatpickr', {
             dateFormat: 'Y-m-d',
-            minDate: 'today',
-            disableMobile: true
+            minDate: 'today'
         });
 
-        // Time Off Modal
-        const timeOffModal = document.querySelector('#timeOffModal');
-        const openTimeOffModal = document.querySelector('#openTimeOffModal');
-        const closeTimeOffModal = document.querySelector('#closeTimeOffModal');
-        const cancelTimeOff = document.querySelector('#cancelTimeOff');
-
-        openTimeOffModal.addEventListener('click', () => {
-            timeOffModal.classList.add('active');
+        // Time off form submission
+        const timeOffForm = document.getElementById('timeOffForm');
+        timeOffForm?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(timeOffForm);
+            try {
+                const response = await fetch('Employeedashboard.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                const notification = document.createElement('div');
+                notification.className = `update-notification ${result.success ? 'alert-success' : 'alert-error'}`;
+                notification.innerHTML = `
+                    <i class="fas fa-${result.success ? 'check-circle' : 'exclamation-circle'}"></i>
+                    <span>${result.message}</span>
+                    <button class="close-notification">&times;</button>
+                `;
+                document.body.appendChild(notification);
+                notification.querySelector('.close-notification').addEventListener('click', () => notification.remove());
+                if (result.success) {
+                    timeOffForm.reset();
+                    closeModal('timeOffModal');
+                    setTimeout(() => notification.remove(), 3000);
+                }
+            } catch (error) {
+                console.error('Error submitting time off request:', error);
+            }
         });
 
-        closeTimeOffModal.addEventListener('click', () => {
-            timeOffModal.classList.remove('active');
-        });
-
-        cancelTimeOff.addEventListener('click', () => {
-            timeOffModal.classList.remove('active');
-        });
-
-        // Holiday Modal
-        const holidayModal = document.querySelector('#holidayModal');
-        const openHolidayModal = document.querySelector('#openHolidayModal');
-        const closeHolidayModal = document.querySelector('#closeHolidayModal');
-        const closeHolidayModalFooter = document.querySelector('#closeHolidayModalFooter');
-
-        openHolidayModal.addEventListener('click', () => {
-            holidayModal.classList.add('active');
-        });
-
-        closeHolidayModal.addEventListener('click', () => {
-            holidayModal.classList.remove('active');
-        });
-
-        closeHolidayModalFooter.addEventListener('click', () => {
-            holidayModal.classList.remove('active');
-        });
-
-        // Notification Close
-        const closeNotification = document.querySelector('#closeNotification');
-        if (closeNotification) {
-            closeNotification.addEventListener('click', () => {
-                closeNotification.parentElement.style.display = 'none';
-            });
-        }
-
-        // Calendar Logic
-        const calendarDays = document.querySelector('#calendarDays');
-        const calendarMonth = document.querySelector('#calendarMonth');
-        const prevMonth = document.querySelector('#prevMonth');
-        const nextMonth = document.querySelector('#nextMonth');
+        // Calendar functionality
+        const calendarDays = document.getElementById('calendarDays');
+        const currentMonthElement = document.getElementById('currentMonth');
+        const prevMonthBtn = document.getElementById('prevMonth');
+        const nextMonthBtn = document.getElementById('nextMonth');
+        const holidays = <?php echo json_encode($philippineHolidays); ?>;
+        const events = <?php echo json_encode($monthEvents); ?>;
         let currentDate = new Date();
+        let currentMonth = currentDate.getMonth();
+        let currentYear = currentDate.getFullYear();
 
         function renderCalendar() {
-            calendarDays.innerHTML = '';
-            calendarMonth.textContent = currentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-
-            const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-            const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-            const prevLastDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0);
-            const daysInMonth = lastDay.getDate();
-            const prevDays = prevLastDay.getDate();
+            const firstDay = new Date(currentYear, currentMonth, 1);
+            const lastDay = new Date(currentYear, currentMonth + 1, 0);
             const firstDayIndex = firstDay.getDay();
+            const lastDate = lastDay.getDate();
+            const prevLastDay = new Date(currentYear, currentMonth, 0).getDate();
+            const today = new Date();
+
+            currentMonthElement.textContent = `${firstDay.toLocaleString('default', { month: 'long' })} ${currentYear}`;
+            calendarDays.innerHTML = '';
 
             // Previous month days
-            for (let i = firstDayIndex - 1; i >= 0; i--) {
+            for (let i = firstDayIndex; i > 0; i--) {
                 const day = document.createElement('div');
-                day.classList.add('calendar-day', 'other-month');
-                day.textContent = prevDays - i;
+                day.className = 'calendar-day other-month';
+                day.textContent = prevLastDay - i + 1;
                 calendarDays.appendChild(day);
             }
 
             // Current month days
-            for (let i = 1; i <= daysInMonth; i++) {
+            for (let i = 1; i <= lastDate; i++) {
                 const day = document.createElement('div');
-                day.classList.add('calendar-day');
+                day.className = 'calendar-day';
                 day.textContent = i;
 
-                const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-                if (dateStr === new Date().toISOString().split('T')[0]) {
+                const currentDay = new Date(currentYear, currentMonth, i);
+                if (
+                    currentDay.getDate() === today.getDate() &&
+                    currentDay.getMonth() === today.getMonth() &&
+                    currentDay.getFullYear() === today.getFullYear()
+                ) {
                     day.classList.add('today');
                 }
 
-                // Check for holidays
-                const holiday = <?php echo json_encode($philippineHolidays); ?>.find(h => h.date === dateStr);
+                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                const holiday = holidays.find(h => h.date === dateStr);
                 if (holiday) {
                     day.classList.add('holiday');
-                    const tooltip = document.createElement('div');
-                    tooltip.classList.add('holiday-tooltip');
+                    const tooltip = document.createElement('span');
+                    tooltip.className = 'holiday-tooltip';
                     tooltip.textContent = holiday.name;
                     day.appendChild(tooltip);
                 }
 
-                // Check for events
-                const events = <?php echo json_encode($monthEvents); ?>.filter(e => e.event_date === dateStr);
-                if (events.length > 0) {
+                const event = events.find(e => e.event_date === dateStr);
+                if (event) {
                     day.classList.add('event');
-                    const tooltip = document.createElement('div');
-                    tooltip.classList.add('holiday-tooltip');
-                    tooltip.textContent = events.map(e => `${e.title} (${e.start_time})`).join(', ');
+                    const tooltip = document.createElement('span');
+                    tooltip.className = 'holiday-tooltip';
+                    tooltip.textContent = event.title;
                     day.appendChild(tooltip);
-                    const dot = document.createElement('div');
-                    dot.classList.add('event-dot');
+                    const dot = document.createElement('span');
+                    dot.className = 'event-dot';
                     day.appendChild(dot);
                 }
 
@@ -1539,57 +1688,34 @@ $philippineHolidays = [
             }
 
             // Next month days
-            const lastDayIndex = lastDay.getDay();
-            for (let i = 1; i <= 6 - lastDayIndex; i++) {
+            const remainingDays = 42 - (firstDayIndex + lastDate);
+            for (let i = 1; i <= remainingDays; i++) {
                 const day = document.createElement('div');
-                day.classList.add('calendar-day', 'other-month');
+                day.className = 'calendar-day other-month';
                 day.textContent = i;
                 calendarDays.appendChild(day);
             }
         }
 
-        prevMonth.addEventListener('click', () => {
-            currentDate.setMonth(currentDate.getMonth() - 1);
+        prevMonthBtn.addEventListener('click', () => {
+            currentMonth--;
+            if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            }
             renderCalendar();
         });
 
-        nextMonth.addEventListener('click', () => {
-            currentDate.setMonth(currentDate.getMonth() + 1);
+        nextMonthBtn.addEventListener('click', () => {
+            currentMonth++;
+            if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
             renderCalendar();
         });
 
         renderCalendar();
-
-        // Form Submission via AJAX
-        const timeOffForm = document.querySelector('#timeOffForm');
-        timeOffForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(timeOffForm);
-            try {
-                const response = await fetch('', {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await response.json();
-                const notification = document.createElement('div');
-                notification.classList.add('update-notification');
-                notification.innerHTML = `
-                    <i class="fas fa-${result.success ? 'check-circle' : 'exclamation-circle'}"></i>
-                    <span>${result.message}</span>
-                    <button class="close-notification">×</button>
-                `;
-                document.body.appendChild(notification);
-                notification.querySelector('.close-notification').addEventListener('click', () => {
-                    notification.remove();
-                });
-                if (result.success) {
-                    timeOffModal.classList.remove('active');
-                    setTimeout(() => location.reload(), 2000);
-                }
-            } catch (error) {
-                console.error('Error:', error);
-            }
-        });
     </script>
 </body>
 </html>

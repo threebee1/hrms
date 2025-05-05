@@ -2,22 +2,18 @@
 // Start session
 session_start();
 
-
 // Database connection
 $servername = "localhost";
 $username = "root";
 $password = "";
 $dbname = "hrms";
 
-
 $conn = new mysqli($servername, $username, $password, $dbname);
-
 
 // Check connection
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
-
 
 // Assume user is logged in - In a real application, you would verify this
 // For demo purposes, we'll simulate a logged-in HR user
@@ -28,14 +24,12 @@ if (!isset($_SESSION['user_id'])) {
     $_SESSION['role'] = 'hr';
 }
 
-
 $current_user_id = $_SESSION['user_id'];
 $current_user_role = $_SESSION['role'];
 
-
 // Function to get user details
 function getUserDetails($conn, $user_id) {
-    $sql = "SELECT u.*, e.first_name, e.last_name, e.department, e.position, e.profile_picture
+    $sql = "SELECT u.id, u.username, u.role, e.first_name, e.last_name, e.department, e.position, e.profile_picture
             FROM users u
             LEFT JOIN employees e ON u.id = e.user_id
             WHERE u.id = ?";
@@ -43,17 +37,30 @@ function getUserDetails($conn, $user_id) {
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $result = $stmt->get_result();
-    return $result->fetch_assoc();
+    $user = $result->fetch_assoc();
+    
+    // Fallback for missing employee data
+    if (!$user['first_name'] || !$user['last_name']) {
+        $user['first_name'] = $user['username'];
+        $user['last_name'] = '';
+    }
+    if (!$user['department']) {
+        $user['department'] = ucfirst($user['role']);
+    }
+    if (!$user['position']) {
+        $user['position'] = ucfirst($user['role']);
+    }
+    
+    return $user;
 }
-
 
 // Function to get conversation messages
 function getConversation($conn, $user1_id, $user2_id) {
     $sql = "SELECT i.*,
-                  CONCAT(e_sender.first_name, ' ', e_sender.last_name) as sender_name,
+                  COALESCE(CONCAT(e_sender.first_name, ' ', e_sender.last_name), u_sender.username) as sender_name,
                   e_sender.profile_picture as sender_picture,
                   u_sender.role as sender_role,
-                  CONCAT(e_receiver.first_name, ' ', e_receiver.last_name) as receiver_name,
+                  COALESCE(CONCAT(e_receiver.first_name, ' ', e_receiver.last_name), u_receiver.username) as receiver_name,
                   e_receiver.profile_picture as receiver_picture,
                   u_receiver.role as receiver_role
            FROM inbox i
@@ -73,7 +80,6 @@ function getConversation($conn, $user1_id, $user2_id) {
     return $result->fetch_all(MYSQLI_ASSOC);
 }
 
-
 // Function to count unread messages
 function countUnreadMessages($conn, $user_id) {
     $sql = "SELECT COUNT(*) as count FROM inbox WHERE receiver_id = ? AND is_read = 0";
@@ -85,15 +91,13 @@ function countUnreadMessages($conn, $user_id) {
     return $row['count'];
 }
 
-
 // Function to get user conversations
 function getUserConversations($conn, $user_id) {
-    // This query gets the latest message from each conversation
     $sql = "SELECT i.*,
-            CONCAT(e_other.first_name, ' ', e_other.last_name) as other_name,
+            COALESCE(CONCAT(e_other.first_name, ' ', e_other.last_name), u_other.username) as other_name,
             e_other.profile_picture as other_picture,
-            e_other.department as other_department,
-            e_other.position as other_position,
+            COALESCE(e_other.department, u_other.role) as other_department,
+            COALESCE(e_other.position, u_other.role) as other_position,
             u_other.role as other_role,
             u_other.id as other_id,
             (SELECT COUNT(*) FROM inbox WHERE
@@ -127,33 +131,38 @@ function getUserConversations($conn, $user_id) {
     return $result->fetch_all(MYSQLI_ASSOC);
 }
 
-
 // Get list of all available users for new messages
 function getAvailableUsers($conn, $current_user_id, $current_user_role) {
-    // HR can message any employee, employees can only message HR
-    if ($current_user_role == 'hr' || $current_user_role == 'admin') {
-        $sql = "SELECT u.id, u.username, u.role, e.first_name, e.last_name, e.department, e.position, e.profile_picture
-                FROM users u
-                LEFT JOIN employees e ON u.id = e.user_id
-                WHERE u.id != ?
-                ORDER BY u.role, e.department, e.last_name, e.first_name";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("i", $current_user_id);
-    } else {
-        $sql = "SELECT u.id, u.username, u.role, e.first_name, e.last_name, e.department, e.position, e.profile_picture
-                FROM users u
-                LEFT JOIN employees e ON u.id = e.user_id
-                WHERE u.role IN ('hr', 'admin')
-                ORDER BY e.last_name, e.first_name";
-        $stmt = $conn->prepare($sql);
-    }
-   
+    // Allow all users to message any other user, excluding themselves
+    $sql = "SELECT u.id, u.username, u.role, e.first_name, e.last_name, e.department, e.position, e.profile_picture
+            FROM users u
+            LEFT JOIN employees e ON u.id = e.user_id
+            WHERE u.id != ?
+            ORDER BY COALESCE(e.last_name, u.username), COALESCE(e.first_name, u.username)";
+    
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $current_user_id);
     $stmt->execute();
     $result = $stmt->get_result();
-   
-    return $result->fetch_all(MYSQLI_ASSOC);
+    
+    $users = $result->fetch_all(MYSQLI_ASSOC);
+    
+    // Add fallback for missing employee data
+    foreach ($users as &$user) {
+        if (!$user['first_name'] || !$user['last_name']) {
+            $user['first_name'] = $user['username'];
+            $user['last_name'] = '';
+        }
+        if (!$user['department']) {
+            $user['department'] = ucfirst($user['role']);
+        }
+        if (!$user['position']) {
+            $user['position'] = ucfirst($user['role']);
+        }
+    }
+    
+    return $users;
 }
-
 
 // Process message sending
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
@@ -182,7 +191,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
     }
 }
 
-
 // Mark messages as read when viewing a conversation
 if (isset($_GET['user_id'])) {
     $other_user_id = $_GET['user_id'];
@@ -198,20 +206,16 @@ if (isset($_GET['user_id'])) {
     $other_user = getUserDetails($conn, $other_user_id);
 }
 
-
 // Get user's conversations for the sidebar
 $conversations = getUserConversations($conn, $current_user_id);
 $unread_count = countUnreadMessages($conn, $current_user_id);
 
-
 // Get available users for new message
 $available_users = getAvailableUsers($conn, $current_user_id, $current_user_role);
-
 
 // Get current user details
 $current_user = getUserDetails($conn, $current_user_id);
 ?>
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -229,7 +233,7 @@ $current_user = getUserDetails($conn, $current_user_id);
             --secondary: #BFA2DB;
             --light: #F7EDF0;
             --white: #FFFFFF;
-            --error: #FF6B6B;
+            --error: #28px;
             --success: #4BB543;
             --text: #2D2A4A;
             --text-light: #A0A0B2;
@@ -241,7 +245,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0.5);
         }
 
-
         body {
             background-color: var(--light);
             color: var(--text);
@@ -249,14 +252,12 @@ $current_user = getUserDetails($conn, $current_user_id);
             line-height: 1.6;
         }
 
-
         /* Navbar */
         .navbar {
             background-color: var(--primary-dark) !important;
             box-shadow: var(--shadow);
             padding: 0.75rem 1rem;
         }
-
 
         .navbar-brand {
             font-family: 'Poppins', sans-serif;
@@ -267,21 +268,17 @@ $current_user = getUserDetails($conn, $current_user_id);
             font-size: 1.25rem;
         }
 
-
         .nav-link {
             transition: var(--transition);
         }
-
 
         .nav-link.active {
             color: var(--secondary) !important;
         }
 
-
         .btn-outline-light:hover {
             background-color: var(--primary-light);
         }
-
 
         /* Chat Container */
         .chat-container {
@@ -289,7 +286,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             margin-top: 64px;
             background-color: var(--light);
         }
-
 
         /* Contacts List */
         .contacts-list {
@@ -300,13 +296,11 @@ $current_user = getUserDetails($conn, $current_user_id);
             transition: var(--transition);
         }
 
-
         .contacts-header {
             padding: 1rem;
             background-color: var(--white);
             border-bottom: 1px solid var(--gray);
         }
-
 
         .contact-item {
             cursor: pointer;
@@ -315,22 +309,19 @@ $current_user = getUserDetails($conn, $current_user_id);
             transition: var(--transition);
         }
 
-
         .contact-item:hover, .contact-item.active {
             background-color: var(--light);
         }
-
 
         .contact-item.active {
             border-left: 3px solid var(--primary);
         }
 
-
         .profile-pic {
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            object-fit: cover;
+            object-fit:424px;
             background-color: var(--secondary);
             color: var(--white);
             display: flex;
@@ -338,7 +329,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             justify-content: center;
             font-weight: 500;
         }
-
 
         /* Message Area */
         .message-area {
@@ -348,14 +338,12 @@ $current_user = getUserDetails($conn, $current_user_id);
             background-color: var(--white);
         }
 
-
         .message-header {
             padding: 1rem;
             border-bottom: 1px solid var(--gray);
             background-color: var(--white);
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
-
 
         .messages-container {
             flex-grow: 1;
@@ -364,13 +352,11 @@ $current_user = getUserDetails($conn, $current_user_id);
             background-color: var(--white);
         }
 
-
         .message-input {
             padding: 1rem;
             border-top: 1px solid var(--gray);
             background-color: var(--white);
         }
-
 
         /* Message Bubbles */
         .message-bubble {
@@ -383,7 +369,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             box-shadow: var(--shadow);
         }
 
-
         .message-sent {
             background-color: var(--secondary);
             color: var(--white);
@@ -391,13 +376,11 @@ $current_user = getUserDetails($conn, $current_user_id);
             border-bottom-right-radius: 5px;
         }
 
-
         .message-received {
             background-color: var(--light);
             margin-right: auto;
             border-bottom-left-radius: 5px;
         }
-
 
         .message-time {
             font-size: 0.7em;
@@ -406,25 +389,21 @@ $current_user = getUserDetails($conn, $current_user_id);
             text-align: right;
         }
 
-
         /* Badges & Indicators */
         .badge-notification {
             font-size: 0.6em;
             transform: translate(30%, -30%);
         }
 
-
         .unread-badge {
             font-size: 0.7em;
             background-color: var(--primary) !important;
         }
 
-
         .role-badge {
             font-size: 0.6em;
             padding: 0.2em 0.4em;
         }
-
 
         /* Inputs & Buttons */
         .form-control, .form-select {
@@ -433,12 +412,10 @@ $current_user = getUserDetails($conn, $current_user_id);
             transition: var(--transition);
         }
 
-
         .form-control:focus, .form-select:focus {
             border-color: var(--primary-light);
             box-shadow: var(--focus-ring);
         }
-
 
         .btn-primary {
             background-color: var(--primary);
@@ -446,17 +423,14 @@ $current_user = getUserDetails($conn, $current_user_id);
             transition: var(--transition);
         }
 
-
         .btn-primary:hover {
             background-color: var(--primary-light);
             border-color: var(--primary-light);
         }
 
-
         .btn-outline-secondary {
             border-color: var(--gray);
         }
-
 
         /* Date Divider */
         .message-date-divider {
@@ -464,7 +438,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             margin: 1rem 0;
             position: relative;
         }
-
 
         .message-date-divider span {
             background-color: var(--white);
@@ -474,7 +447,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             font-size: 0.8em;
             color: var(--text-light);
         }
-
 
         .message-date-divider:before {
             content: "";
@@ -487,7 +459,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             z-index: 0;
         }
 
-
         /* Empty State */
         .empty-state {
             display: flex;
@@ -498,12 +469,10 @@ $current_user = getUserDetails($conn, $current_user_id);
             color: var(--text-light);
         }
 
-
         /* Mobile Responsiveness */
         .mobile-toggle {
             display: none;
         }
-
 
         @media (max-width: 768px) {
             .contacts-list {
@@ -517,11 +486,9 @@ $current_user = getUserDetails($conn, $current_user_id);
                 height: calc(100vh - 64px);
             }
 
-
             .contacts-list.show {
                 transform: translateX(0);
             }
-
 
             .mobile-toggle {
                 display: block;
@@ -530,17 +497,14 @@ $current_user = getUserDetails($conn, $current_user_id);
             }
         }
 
-
         /* Custom Scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
         }
 
-
         ::-webkit-scrollbar-track {
             background: var(--light);
         }
-
 
         ::-webkit-scrollbar-thumb {
             background: var(--primary-light);
@@ -597,7 +561,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             </div>
         </div>
     </nav>
-
 
     <div class="container-fluid chat-container">
         <div class="row h-100">
@@ -675,7 +638,6 @@ $current_user = getUserDetails($conn, $current_user_id);
                 </div>
             </div>
 
-
             <!-- Message Area -->
             <div class="col-md-9 col-lg-9 p-0 message-area">
                 <?php if (isset($_GET['user_id'])): ?>
@@ -712,7 +674,6 @@ $current_user = getUserDetails($conn, $current_user_id);
                         </div>
                     </div>
 
-
                     <!-- Messages Container -->
                     <div class="messages-container" id="messagesContainer">
                         <?php
@@ -733,7 +694,6 @@ $current_user = getUserDetails($conn, $current_user_id);
                             </div>
                         <?php endif; ?>
 
-
                             <div class="d-flex flex-column <?php echo ($message['sender_id'] == $current_user_id) ? 'align-items-end' : 'align-items-start'; ?>">
                                 <div class="message-bubble <?php echo ($message['sender_id'] == $current_user_id) ? 'message-sent' : 'message-received'; ?>">
                                     <?php if (!empty($message['subject'])): ?>
@@ -750,7 +710,6 @@ $current_user = getUserDetails($conn, $current_user_id);
                             </div>
                         <?php endforeach; ?>
                     </div>
-
 
                     <!-- Message Input -->
                     <div class="message-input">
@@ -789,7 +748,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             </div>
         </div>
     </div>
-
 
     <!-- New Message Modal -->
     <div class="modal fade" id="newMessageModal" tabindex="-1" aria-labelledby="newMessageModalLabel" aria-hidden="true">
@@ -832,7 +790,6 @@ $current_user = getUserDetails($conn, $current_user_id);
             </div>
         </div>
     </div>
-
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>

@@ -21,12 +21,13 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {
     error_log("Database connection failed: " . $e->getMessage());
-    die('Internal server error');
+    die('Internal server error: Database connection failed.');
 }
 
 // Check if the user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+    error_log("No user_id in session, redirecting to login.html");
+    header('Location: login.html');
     exit();
 }
 
@@ -36,6 +37,14 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 $user_id = $_SESSION['user_id'];
+
+// Verify timesheets table exists
+try {
+    $pdo->query("DESCRIBE timesheets");
+} catch (PDOException $e) {
+    error_log("Timesheets table does not exist or is inaccessible: " . $e->getMessage());
+    die('Internal server error: Timesheet table is missing or inaccessible.');
+}
 
 // Fetch user data with LEFT JOIN to handle missing employee records
 $stmt = $pdo->prepare("
@@ -50,12 +59,13 @@ try {
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log("User query failed: " . $e->getMessage());
-    die('Internal server error');
+    die('Internal server error: Unable to fetch user data.');
 }
 
 if (!$user) {
+    error_log("User not found for user_id: $user_id");
     session_destroy();
-    header('Location: login.php?error=user_not_found');
+    header('Location: login.html?error=user_not_found');
     exit();
 }
 
@@ -86,23 +96,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
     $clock_out = trim($_POST['clock_out'] ?? '');
     $break_duration = trim($_POST['break_duration'] ?? '');
 
+    error_log("POST received: action=$action, date=$date, clock_in=$clock_in, clock_out=$clock_out, break_duration=$break_duration, user_id=$user_id");
+
     // Validate inputs
     if (empty($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
         $error_message = "Please select a valid date.";
-    } elseif ($action === 'clock_in' && empty($clock_in)) {
-        $error_message = "Please enter a valid clock-in time.";
-    } elseif ($action === 'clock_out' && (empty($clock_out) || empty($break_duration))) {
-        $error_message = "Please enter a valid clock-out time and break duration.";
-    } else {
-        try {
-            $pdo->beginTransaction();
+        error_log("Validation failed: Invalid date format: $date");
+    } elseif ($action === 'clock_in') {
+        // Validate clock-in time format (HH:MM)
+        if (empty($clock_in) || !preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $clock_in)) {
+            $error_message = "Please enter a valid clock-in time (e.g., 09:00).";
+            error_log("Validation failed: Invalid clock-in time: $clock_in");
+        } else {
+            try {
+                $pdo->beginTransaction();
 
-            if ($action === 'clock_in') {
                 // Check if a timesheet entry already exists for the date
                 $stmt = $pdo->prepare("SELECT id FROM timesheets WHERE employee_id = ? AND date = ?");
                 $stmt->execute([$user_id, $date]);
                 if ($stmt->fetch()) {
                     $error_message = "A timesheet entry already exists for this date.";
+                    error_log("Duplicate timesheet entry for user_id: $user_id, date: $date");
                 } else {
                     // Insert new timesheet entry
                     $stmt = $pdo->prepare("
@@ -110,9 +124,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                         VALUES (?, ?, ?, 'pending')
                     ");
                     $stmt->execute([$user_id, $date, $clock_in]);
+                    error_log("Clock-in recorded successfully for user_id: $user_id, date: $date, clock_in: $clock_in");
                     $success_message = "Clock-in recorded successfully!";
                 }
-            } elseif ($action === 'clock_out') {
+
+                $pdo->commit();
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                error_log("Timesheet clock-in failed: " . $e->getMessage());
+                $error_message = "Error recording clock-in. Please try again.";
+            }
+        }
+    } elseif ($action === 'clock_out') {
+        // Validate clock-out inputs
+        if (empty($clock_out) || !preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $clock_out)) {
+            $error_message = "Please enter a valid clock-out time (e.g., 17:00).";
+            error_log("Validation failed: Invalid clock-out time: $clock_out");
+        } elseif (empty($break_duration) || !is_numeric($break_duration) || $break_duration < 0) {
+            $error_message = "Please enter a valid break duration (minutes).";
+            error_log("Validation failed: Invalid break duration: $break_duration");
+        } else {
+            try {
+                $pdo->beginTransaction();
+
                 // Update existing timesheet entry
                 $stmt = $pdo->prepare("
                     SELECT id, clock_in FROM timesheets WHERE employee_id = ? AND date = ? AND clock_out IS NULL
@@ -121,33 +155,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 $timesheet = $stmt->fetch(PDO::FETCH_ASSOC);
 
                 if (!$timesheet) {
-                    $error_message = "No open timesheet found for this date.";
+                    $error_message = "No open timesheet found for this date. Please clock in first.";
+                    error_log("No open timesheet for user_id: $user_id, date: $date");
                 } else {
                     // Calculate total hours
                     $clock_in_time = new DateTime($timesheet['clock_in']);
                     $clock_out_time = new DateTime($clock_out);
-                    $interval = $clock_in_time->diff($clock_out_time);
-                    $total_hours = $interval->h + ($interval->i / 60) - ($break_duration / 60);
-
-                    if ($total_hours <= 0) {
-                        $error_message = "Invalid timesheet: Total hours must be positive.";
+                    if ($clock_out_time <= $clock_in_time) {
+                        $error_message = "Clock-out time must be after clock-in time.";
+                        error_log("Invalid clock-out time: $clock_out is not after clock-in time: {$timesheet['clock_in']}");
                     } else {
-                        $stmt = $pdo->prepare("
-                            UPDATE timesheets 
-                            SET clock_out = ?, break_duration = ?, total_hours = ?, status = 'pending'
-                            WHERE id = ?
-                        ");
-                        $stmt->execute([$clock_out, $break_duration, $total_hours, $timesheet['id']]);
-                        $success_message = "Clock-out recorded successfully!";
+                        $interval = $clock_in_time->diff($clock_out_time);
+                        $total_hours = $interval->h + ($interval->i / 60) - ($break_duration / 60);
+
+                        if ($total_hours <= 0) {
+                            $error_message = "Invalid timesheet: Total hours must be positive.";
+                            error_log("Invalid total hours: $total_hours for user_id: $user_id, date: $date");
+                        } else {
+                            $stmt = $pdo->prepare("
+                                UPDATE timesheets 
+                                SET clock_out = ?, break_duration = ?, total_hours = ?, status = 'pending'
+                                WHERE id = ?
+                            ");
+                            $stmt->execute([$clock_out, $break_duration, $total_hours, $timesheet['id']]);
+                            error_log("Clock-out recorded successfully for user_id: $user_id, date: $date, total_hours: $total_hours");
+                            $success_message = "Clock-out recorded successfully!";
+                        }
                     }
                 }
-            }
 
-            $pdo->commit();
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            error_log("Timesheet update failed: " . $e->getMessage());
-            $error_message = "Error recording timesheet. Please try again.";
+                $pdo->commit();
+            } catch (Exception $e) {
+                $pdo->rollBack();
+                error_log("Timesheet clock-out failed: " . $e->getMessage());
+                $error_message = "Error recording clock-out. Please try again.";
+            }
         }
     }
 }
@@ -218,7 +260,6 @@ try {
             line-height: 1.6;
         }
 
-        /* Sidebar Styles */
         .sidebar {
             width: 260px;
             background: var(--gradient);
@@ -323,7 +364,6 @@ try {
             font-weight: 600;
         }
 
-        /* Main Content Styles */
         .main-content {
             flex: 1;
             overflow-y: auto;
@@ -331,7 +371,6 @@ try {
             background-color: var(--white);
         }
 
-        /* Header Styles */
         .header {
             display: flex;
             justify-content: space-between;
@@ -387,7 +426,6 @@ try {
             box-shadow: var(--shadow);
         }
 
-        /* Content Styles */
         .content {
             max-width: 1200px;
             margin: 40px auto;
@@ -565,7 +603,7 @@ try {
 
         .table td {
             padding: 12px;
-            vertical-align: middle;
+ confront-align: middle;
             border-top: 1px solid var(--gray);
         }
 

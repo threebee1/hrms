@@ -35,22 +35,18 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 $user_id = $_SESSION['user_id'];
-// Debug: Log session user_id
-error_log("Session user_id: " . $user_id);
 
 // Fetch user data
 $stmt = $pdo->prepare("
     SELECT u.id, u.username, u.email, u.role, 
            e.first_name, e.last_name, e.department, e.position
     FROM users u
-    LEFT JOIN employees e ON u.id = e.id
+    JOIN employees e ON u.id = e.id
     WHERE u.id = ?
 ");
 try {
     $stmt->execute([$user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    // Debug: Log fetched user data
-    error_log("Fetched user data: " . print_r($user, true));
 } catch (PDOException $e) {
     error_log("User query failed: " . $e->getMessage());
     die('Internal server error');
@@ -72,6 +68,7 @@ try {
     $unreadMessages = 0;
 }
 
+// Function to calculate time off balance
 // Function to calculate time off balance
 function getTimeOffBalance($pdo, $employee_id, $year = null) {
     $year = $year ?: date('Y');
@@ -835,7 +832,7 @@ $balance = getTimeOffBalance($pdo, $user_id);
                     <span class="menu-badge"><?php echo htmlspecialchars($unreadMessages); ?></span>
                 <?php endif; ?>
             </a>
-            <a href="login.html" class="menu-item">
+            <a href="logout.php" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>
             </a>
@@ -864,7 +861,7 @@ $balance = getTimeOffBalance($pdo, $user_id);
                         echo htmlspecialchars($initials);
                         ?>
                     </div>
-                    <span><?php echo htmlspecialchars(($user['username'] ?? 'Unknown') . ' - ' . ucfirst($user['role'] ?? 'employee')); ?></span>
+                    <span><?php echo htmlspecialchars($user['username'] . ' - ' . ucfirst($user['role'])); ?></span>
                 </div>
             </div>
         </header>
@@ -887,12 +884,6 @@ $balance = getTimeOffBalance($pdo, $user_id);
                         <div class="alert-error" role="alert">
                             <i class="fas fa-exclamation-circle"></i>
                             <?php echo htmlspecialchars($error_message); ?>
-                        </div>
-                    <?php endif; ?>
-                    <?php if (empty($user['first_name']) || empty($user['department'])): ?>
-                        <div class="alert-error" role="alert">
-                            <i class="fas fa-exclamation-circle"></i>
-                            Please complete your profile in <a href="Employeepersonal.php">Personal Info</a> to access all features.
                         </div>
                     <?php endif; ?>
 

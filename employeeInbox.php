@@ -11,9 +11,7 @@ session_set_cookie_params([
 session_start();
 
 // Check if user is logged in, if not redirect to login page
-if (!isset($_SESSION['user_id'])
-    || !isset($_SESSION['role'])) {
-    // Redirect to login page if not logged in  
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
     header("Location: login.php");
     exit;
 }
@@ -37,7 +35,7 @@ $current_user_role = $_SESSION['role'];
 
 // Function to get user details
 function getUserDetails($conn, $user_id) {
-    $sql = "SELECT u.*, e.first_name, e.last_name, e.department, e.position, e.profile_picture
+    $sql = "SELECT u.id, u.username, u.role, e.first_name, e.last_name, e.department, e.position, e.profile_picture
             FROM users u
             LEFT JOIN employees e ON u.id = e.user_id
             WHERE u.id = ?";
@@ -45,16 +43,30 @@ function getUserDetails($conn, $user_id) {
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $result = $stmt->get_result();
-    return $result->fetch_assoc();
+    $user = $result->fetch_assoc();
+    
+    // Fallback for missing employee data
+    if (!$user['first_name'] || !$user['last_name']) {
+        $user['first_name'] = $user['username'];
+        $user['last_name'] = '';
+    }
+    if (!$user['department']) {
+        $user['department'] = ucfirst($user['role']);
+    }
+    if (!$user['position']) {
+        $user['position'] = ucfirst($user['role']);
+    }
+    
+    return $user;
 }
 
 // Function to get conversation messages
 function getConversation($conn, $user1_id, $user2_id) {
     $sql = "SELECT i.*,
-                  CONCAT(e_sender.first_name, ' ', e_sender.last_name) as sender_name,
+                  COALESCE(CONCAT(e_sender.first_name, ' ', e_sender.last_name), u_sender.username) as sender_name,
                   e_sender.profile_picture as sender_picture,
                   u_sender.role as sender_role,
-                  CONCAT(e_receiver.first_name, ' ', e_receiver.last_name) as receiver_name,
+                  COALESCE(CONCAT(e_receiver.first_name, ' ', e_receiver.last_name), u_receiver.username) as receiver_name,
                   e_receiver.profile_picture as receiver_picture,
                   u_receiver.role as receiver_role
            FROM inbox i
@@ -88,10 +100,10 @@ function countUnreadMessages($conn, $user_id) {
 // Function to get user conversations
 function getUserConversations($conn, $user_id) {
     $sql = "SELECT i.*,
-            CONCAT(e_other.first_name, ' ', e_other.last_name) as other_name,
+            COALESCE(CONCAT(e_other.first_name, ' ', e_other.last_name), u_other.username) as other_name,
             e_other.profile_picture as other_picture,
-            e_other.department as other_department,
-            e_other.position as other_position,
+            COALESCE(e_other.department, u_other.role) as other_department,
+            COALESCE(e_other.position, u_other.role) as other_position,
             u_other.role as other_role,
             u_other.id as other_id,
             (SELECT COUNT(*) FROM inbox WHERE
@@ -131,12 +143,28 @@ function getAvailableHRStaff($conn) {
             FROM users u
             LEFT JOIN employees e ON u.id = e.user_id
             WHERE u.role IN ('hr', 'admin')
-            ORDER BY e.last_name, e.first_name";
+            ORDER BY COALESCE(e.last_name, u.username), COALESCE(e.first_name, u.username)";
     $stmt = $conn->prepare($sql);
     $stmt->execute();
     $result = $stmt->get_result();
-   
-    return $result->fetch_all(MYSQLI_ASSOC);
+    
+    $staff = $result->fetch_all(MYSQLI_ASSOC);
+    
+    // Add fallback for missing employee data
+    foreach ($staff as &$user) {
+        if (!$user['first_name'] || !$user['last_name']) {
+            $user['first_name'] = $user['username'];
+            $user['last_name'] = '';
+        }
+        if (!$user['department']) {
+            $user['department'] = ucfirst($user['role']);
+        }
+        if (!$user['position']) {
+            $user['position'] = ucfirst($user['role']);
+        }
+    }
+    
+    return $staff;
 }
 
 // Process message sending
@@ -149,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
     if (empty($message)) {
         $error_message = "Message cannot be empty";
     } else {
-        // Verify the receiver is HR or admin (for employee security)
+        // Verify the receiver is HR or admin
         $sql = "SELECT role FROM users WHERE id = ?";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("i", $receiver_id);
@@ -164,7 +192,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
            
             if ($stmt->execute()) {
                 $success_message = "Message sent successfully";
-                // If we're in a conversation, redirect back to it
                 if (isset($_GET['user_id'])) {
                     header("Location: employeeinbox.php?user_id=" . $_GET['user_id']);
                     exit;
@@ -182,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_message'])) {
 if (isset($_GET['user_id'])) {
     $other_user_id = $_GET['user_id'];
    
-    // Verify the other user is HR or admin (for employee security)
+    // Verify the other user is HR or admin
     $sql = "SELECT role FROM users WHERE id = ?";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $other_user_id);
@@ -191,17 +218,14 @@ if (isset($_GET['user_id'])) {
     $other_user_role = $result->fetch_assoc()['role'];
    
     if ($other_user_role === 'hr' || $other_user_role === 'admin') {
-        // Mark messages as read
         $sql = "UPDATE inbox SET is_read = 1 WHERE sender_id = ? AND receiver_id = ?";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("ii", $other_user_id, $current_user_id);
         $stmt->execute();
        
-        // Get conversation
         $conversation = getConversation($conn, $current_user_id, $other_user_id);
         $other_user = getUserDetails($conn, $other_user_id);
     } else {
-        // Redirect if trying to access non-HR conversation
         header("Location: employeeinbox.php");
         exit;
     }
@@ -551,8 +575,8 @@ $current_user = getUserDetails($conn, $current_user_id);
                 </ul>
                 <div class="d-flex align-items-center">
                     <div class="text-white me-3">
-                        <?php echo $current_user['first_name'] . ' ' . $current_user['last_name']; ?>
-                        <small class="text-white-50">(<?php echo $current_user['department']; ?>)</small>
+                        <?php echo htmlspecialchars($current_user['first_name'] . ' ' . $current_user['last_name']); ?>
+                        <small class="text-white-50">(<?php echo htmlspecialchars($current_user['department']); ?>)</small>
                     </div>
                     <a href="logout.php" class="btn btn-outline-light btn-sm">
                         <i class="fas fa-sign-out-alt"></i> Logout
@@ -609,11 +633,7 @@ $current_user = getUserDetails($conn, $current_user_id);
                                                 <h6 class="mb-0"><?php echo htmlspecialchars($conv['other_name']); ?></h6>
                                                 <small class="text-muted"><?php echo date('M d', strtotime($conv['sent_at'])); ?></small>
                                             </div>
-                                            <?php if (!empty($conv['other_department'])): ?>
-                                                <small class="text-muted"><?php echo htmlspecialchars($conv['other_department']); ?></small>
-                                            <?php else: ?>
-                                                <small class="text-muted"><?php echo ucfirst($conv['other_role']); ?></small>
-                                            <?php endif; ?>
+                                            <small class="text-muted"><?php echo htmlspecialchars($conv['other_department']); ?> - <?php echo ucfirst($conv['other_role']); ?></small>
                                             <div class="d-flex justify-content-between align-items-center mt-1">
                                                 <div class="preview-text">
                                                     <?php if ($conv['sender_id'] == $current_user_id): ?>
@@ -666,13 +686,9 @@ $current_user = getUserDetails($conn, $current_user_id);
                                 <?php endif; ?>
                             </div>
                             <div>
-                                <h5 class="mb-0"><?php echo $other_user['first_name'] . ' ' . $other_user['last_name']; ?></h5>
+                                <h5 class="mb-0"><?php echo htmlspecialchars($other_user['first_name'] . ' ' . $other_user['last_name']); ?></h5>
                                 <small class="text-muted">
-                                    <?php if (!empty($other_user['department'])): ?>
-                                        <?php echo $other_user['department']; ?> - <?php echo ucfirst($other_user['role']); ?>
-                                    <?php else: ?>
-                                        <?php echo ucfirst($other_user['role']); ?>
-                                    <?php endif; ?>
+                                    <?php echo htmlspecialchars($other_user['department']); ?> - <?php echo ucfirst($other_user['role']); ?>
                                 </small>
                             </div>
                         </div>
@@ -782,9 +798,8 @@ $current_user = getUserDetails($conn, $current_user_id);
                                 <option value="">Select HR representative...</option>
                                 <?php foreach ($available_hr_staff as $staff): ?>
                                     <option value="<?php echo $staff['id']; ?>">
-                                        <?php echo $staff['first_name'] . ' ' . $staff['last_name']; ?>
-                                        <?php if ($staff['role'] == 'hr'): ?>(HR)<?php endif; ?>
-                                        <?php if ($staff['role'] == 'admin'): ?>(Admin)<?php endif; ?>
+                                        <?php echo htmlspecialchars($staff['first_name'] . ' ' . $staff['last_name']); ?>
+                                        (<?php echo ucfirst($staff['role']); ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -805,6 +820,7 @@ $current_user = getUserDetails($conn, $current_user_id);
                         </button>
                     </div>
                 </form>
+            </div>
             </div>
         </div>
     </div>

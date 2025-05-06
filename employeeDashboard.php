@@ -60,44 +60,59 @@ if (!$currentUser) {
 
 // Fetch announcements (limited to 5 for display)
 $announcementsStmt = $pdo->query("
-    SELECT id, title, message, created_at 
+    SELECT id, message, tag, announcement_date, created_at 
     FROM announcements 
     ORDER BY created_at DESC 
     LIMIT 5
 ");
 $announcements = $announcementsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Handle announcement creation (admin only)
-$announcementSuccess = null;
-$announcementError = null;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_announcement']) && $currentUser['role'] === 'admin') {
+// Handle announcement creation (admin or HR only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_announcement']) && in_array($currentUser['role'], ['admin', 'hr'])) {
+    header('Content-Type: application/json');
+    
     if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $announcementError = "Invalid CSRF token.";
-    } else {
-        $title = filter_var($_POST['announcement_title'], FILTER_SANITIZE_STRING);
-        $message = filter_var($_POST['announcement_message'], FILTER_SANITIZE_STRING);
-
-        if (empty($title) || empty($message)) {
-            $announcementError = "Title and message are required.";
-        } else {
-            $insertStmt = $pdo->prepare("
-                INSERT INTO announcements (title, message, created_at)
-                VALUES (?, ?, NOW())
-            ");
-            try {
-                if ($insertStmt->execute([$title, $message])) {
-                    $announcementSuccess = "Announcement posted successfully!";
-                    header('Location: Employeedashboard.php');
-                    exit();
-                } else {
-                    $announcementError = "Failed to post announcement.";
-                }
-            } catch (PDOException $e) {
-                error_log("Announcement insert failed: " . $e->getMessage());
-                $announcementError = "Failed to post announcement.";
-            }
-        }
+        echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
+        exit();
     }
+
+    $message = filter_var($_POST['message'] ?? '', FILTER_SANITIZE_STRING);
+    $announcement_date = filter_var($_POST['announcement_date'] ?? '', FILTER_SANITIZE_STRING);
+    $tag = filter_var($_POST['tag'] ?? '', FILTER_SANITIZE_STRING);
+
+    if (empty($message) || empty($announcement_date)) {
+        echo json_encode(['success' => false, 'message' => 'Message and date are required.']);
+        exit();
+    }
+
+    if (!in_array($tag, ['important', 'critical', 'minor', 'employee'])) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tag selected.']);
+        exit();
+    }
+
+    if (!DateTime::createFromFormat('Y-m-d', $announcement_date)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid date format.']);
+        exit();
+    }
+
+    try {
+        $insertStmt = $pdo->prepare("
+            INSERT INTO announcements 
+            (message, tag, announcement_date, created_at) 
+            VALUES (?, ?, ?, NOW())
+        ");
+        $success = $insertStmt->execute([$message, $tag, $announcement_date]);
+        
+        if ($success) {
+            echo json_encode(['success' => true, 'message' => 'Announcement created successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to create announcement.']);
+        }
+    } catch (PDOException $e) {
+        error_log("Announcement insertion failed: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Database error occurred.']);
+    }
+    exit();
 }
 
 // Fetch time off data
@@ -112,17 +127,6 @@ $timeOffStmt = $pdo->prepare("
 ");
 $timeOffStmt->execute([$currentUserId]);
 $timeOffData = $timeOffStmt->fetch(PDO::FETCH_ASSOC);
-
-// Fetch recent timesheets
-$timesheetsStmt = $pdo->prepare("
-    SELECT date, clock_in, clock_out, break_duration, total_hours, status 
-    FROM timesheets 
-    WHERE employee_id = ? 
-    ORDER BY date DESC 
-    LIMIT 5
-");
-$timesheetsStmt->execute([$currentUserId]);
-$recentTimesheets = $timesheetsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Fetch unread messages count
 $unreadMessagesStmt = $pdo->prepare("
@@ -146,39 +150,51 @@ $eventsStmt->execute([$firstDayOfMonth, $lastDayOfMonth]);
 $monthEvents = $eventsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Handle time off request submission (via AJAX)
-$requestSuccess = null;
-$requestError = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_time_off'])) {
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $requestError = "Invalid CSRF token.";
-    } else {
-        $leaveType = filter_var($_POST['leave_type'], FILTER_SANITIZE_STRING);
-        $startDate = filter_var($_POST['start_date'], FILTER_SANITIZE_STRING);
-        $endDate = filter_var($_POST['end_date'], FILTER_SANITIZE_STRING);
-        $notes = filter_var($_POST['notes'], FILTER_SANITIZE_STRING);
-
-        if (!in_array($leaveType, ['vacation', 'sick', 'personal', 'bereavement', 'other'])) {
-            $requestError = "Invalid leave type.";
-        } elseif (!DateTime::createFromFormat('Y-m-d', $startDate) || !DateTime::createFromFormat('Y-m-d', $endDate)) {
-            $requestError = "Invalid date format.";
-        } else {
-            $insertStmt = $pdo->prepare("
-                INSERT INTO time_off_requests 
-                (employee_id, leave_type, start_date, end_date, notes, status) 
-                VALUES (?, ?, ?, ?, ?, 'pending')
-            ");
-            if ($insertStmt->execute([$currentUserId, $leaveType, $startDate, $endDate, $notes])) {
-                $requestSuccess = "Time off request submitted successfully!";
-            } else {
-                $requestError = "Failed to submit time off request.";
-            }
-        }
-    }
     header('Content-Type: application/json');
-    echo json_encode([
-        'success' => isset($requestSuccess),
-        'message' => $requestSuccess ?? $requestError
-    ]);
+    
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
+        exit();
+    }
+
+    $leaveType = filter_var($_POST['leave_type'], FILTER_SANITIZE_STRING);
+    $startDate = filter_var($_POST['start_date'], FILTER_SANITIZE_STRING);
+    $endDate = filter_var($_POST['end_date'], FILTER_SANITIZE_STRING);
+    $notes = filter_var($_POST['notes'], FILTER_SANITIZE_STRING);
+
+    if (!in_array($leaveType, ['vacation', 'sick', 'personal', 'bereavement', 'other'])) {
+        echo json_encode(['success' => false, 'message' => 'Invalid leave type.']);
+        exit();
+    }
+
+    if (!DateTime::createFromFormat('Y-m-d', $startDate) || !DateTime::createFromFormat('Y-m-d', $endDate)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid date format.']);
+        exit();
+    }
+
+    if (strtotime($endDate) < strtotime($startDate)) {
+        echo json_encode(['success' => false, 'message' => 'End date cannot be before start date.']);
+        exit();
+    }
+
+    try {
+        $insertStmt = $pdo->prepare("
+            INSERT INTO time_off_requests 
+            (employee_id, leave_type, start_date, end_date, notes, status, created_at) 
+            VALUES (?, ?, ?, ?, ?, 'pending', NOW())
+        ");
+        $success = $insertStmt->execute([$currentUserId, $leaveType, $startDate, $endDate, $notes]);
+        
+        if ($success) {
+            echo json_encode(['success' => true, 'message' => 'Time off request submitted successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to submit time off request.']);
+        }
+    } catch (PDOException $e) {
+        error_log("Time off request insertion failed: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Database error occurred.']);
+    }
     exit();
 }
 
@@ -248,7 +264,6 @@ $philippineHolidays = [
         line-height: 1.6;
     }
 
-    /* Sidebar Styles */
     .sidebar {
         width: 260px;
         background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
@@ -349,7 +364,6 @@ $philippineHolidays = [
         font-size: 12px;
     }
 
-    /* Main Content Styles */
     .main-content {
         flex: 1;
         overflow-y: auto;
@@ -357,7 +371,6 @@ $philippineHolidays = [
         background-color: var(--white);
     }
 
-    /* Header Styles */
     .header {
         display: flex;
         justify-content: space-between;
@@ -412,7 +425,6 @@ $philippineHolidays = [
         font-size: 16px;
     }
 
-    /* Dashboard Grid */
     .dashboard-grid {
         display: grid;
         grid-template-columns: repeat(12, 1fr);
@@ -422,7 +434,6 @@ $philippineHolidays = [
         margin: 0 auto;
     }
 
-    /* Announcement Section */
     .announcement-section {
         grid-column: 1 / -1;
         background-color: var(--white);
@@ -481,13 +492,6 @@ $philippineHolidays = [
         flex: 1;
     }
 
-    .announcement-content h3 {
-        font-family: 'Poppins', sans-serif;
-        font-size: 18px;
-        color: var(--text);
-        margin-bottom: 8px;
-    }
-
     .announcement-content p {
         font-size: 14px;
         color: var(--text-light);
@@ -497,6 +501,34 @@ $philippineHolidays = [
     .announcement-content small {
         font-size: 12px;
         color: var(--text-light);
+    }
+
+    .announcement-tag {
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: var(--border-radius);
+        margin-left: 10px;
+        font-weight: 500;
+    }
+
+    .announcement-tag.important {
+        background-color: rgba(255, 107, 107, 0.2);
+        color: var(--error);
+    }
+
+    .announcement-tag.critical {
+        background-color: rgba(191, 162, 219, 0.2);
+        color: var(--secondary);
+    }
+
+    .announcement-tag.minor {
+        background-color: rgba(75, 181, 67, 0.2);
+        color: var(--success);
+    }
+
+    .announcement-tag.employee {
+        background-color: rgba(75, 63, 114, 0.2);
+        color: var(--primary);
     }
 
     .announcement-actions {
@@ -517,7 +549,6 @@ $philippineHolidays = [
         color: var(--primary);
     }
 
-    /* Stats Cards */
     .stats-card {
         grid-column: span 4;
         background-color: var(--white);
@@ -577,7 +608,6 @@ $philippineHolidays = [
         gap: 5px;
     }
 
-    /* Calendar Section */
     .calendar-section {
         grid-column: span 8;
         background-color: var(--white);
@@ -758,7 +788,6 @@ $philippineHolidays = [
         top: -35px;
     }
 
-    /* Time Off Section */
     .timeoff-section {
         grid-column: span 4;
         background-color: var(--white);
@@ -808,73 +837,6 @@ $philippineHolidays = [
         transition: width 0.5s ease;
     }
 
-    /* Timesheets Section */
-    .timesheets-section {
-        grid-column: span 8;
-        background-color: var(--white);
-        border-radius: var(--border-radius);
-        padding: 24px;
-        box-shadow: var(--shadow);
-        transition: var(--transition);
-    }
-
-    .timesheets-section:hover {
-        box-shadow: var(--shadow-hover);
-    }
-
-    .timesheet-list {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .timesheet-item {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-        align-items: center;
-        padding: 12px;
-        border-radius: var(--border-radius);
-        background-color: var(--light);
-        transition: var(--transition);
-    }
-
-    .timesheet-item:hover {
-        background-color: rgba(191, 162, 219, 0.1);
-    }
-
-    .timesheet-date {
-        font-weight: 500;
-    }
-
-    .timesheet-time {
-        font-size: 14px;
-        color: var(--text);
-    }
-
-    .timesheet-status {
-        font-size: 12px;
-        padding: 4px 10px;
-        border-radius: var(--border-radius);
-        font-weight: 500;
-        text-align: center;
-    }
-
-    .timesheet-status.pending {
-        background-color: rgba(255, 193, 7, 0.2);
-        color: #FFA000;
-    }
-
-    .timesheet-status.approved {
-        background-color: rgba(75, 181, 67, 0.2);
-        color: var(--success);
-    }
-
-    .timesheet-status.rejected {
-        background-color: rgba(255, 107, 107, 0.2);
-        color: var(--error);
-    }
-
-    /* Modal Styles */
     .modal {
         position: fixed;
         top: 0;
@@ -978,7 +940,6 @@ $philippineHolidays = [
         gap: 10px;
     }
 
-    /* Holiday Modal */
     .holiday-modal {
         position: fixed;
         top: 0;
@@ -1098,7 +1059,6 @@ $philippineHolidays = [
         background-color: var(--white);
     }
 
-    /* Notification Styles */
     .update-notification {
         position: fixed;
         bottom: 20px;
@@ -1143,7 +1103,6 @@ $philippineHolidays = [
         color: var(--primary);
     }
 
-    /* Responsive Styles */
     @media (max-width: 1400px) {
         .stats-card {
             grid-column: span 6;
@@ -1154,9 +1113,6 @@ $philippineHolidays = [
         .timeoff-section {
             grid-column: span 6;
         }
-        .timesheets-section {
-            grid-column: span 12;
-        }
     }
 
     @media (max-width: 992px) {
@@ -1164,9 +1120,6 @@ $philippineHolidays = [
             grid-column: span 12;
         }
         .timeoff-section {
-            grid-column: span 12;
-        }
-        .timesheets-section {
             grid-column: span 12;
         }
         .dashboard-grid {
@@ -1199,10 +1152,6 @@ $philippineHolidays = [
             width: 100%;
             justify-content: space-between;
         }
-        .timesheet-item {
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
         .announcement-item {
             flex-direction: column;
             align-items: flex-start;
@@ -1213,7 +1162,6 @@ $philippineHolidays = [
         }
     }
 
-    /* Alert Styles */
     .alert-success {
         background-color: rgba(75, 181, 67, 0.1);
         color: var(--success);
@@ -1235,7 +1183,6 @@ $philippineHolidays = [
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-header">
             <div class="logo">
@@ -1277,9 +1224,7 @@ $philippineHolidays = [
         </nav>
     </aside>
 
-    <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
         <header class="header">
             <div class="header-title">
                 <h1>Employee Dashboard</h1>
@@ -1294,13 +1239,11 @@ $philippineHolidays = [
             </div>
         </header>
 
-        <!-- Dashboard Grid -->
         <div class="dashboard-grid">
-            <!-- Announcement Section -->
             <div class="announcement-section">
                 <div class="announcement-header">
                     <h2 class="announcement-title">Announcements</h2>
-                    <?php if ($currentUser['role'] === 'admin'): ?>
+                    <?php if (in_array($currentUser['role'], ['admin', 'hr'])): ?>
                         <button class="btn btn-primary" id="openAnnouncementModal">Post Announcement</button>
                     <?php endif; ?>
                 </div>
@@ -1312,9 +1255,18 @@ $philippineHolidays = [
                             <div class="announcement-item">
                                 <i class="fas fa-bullhorn announcement-icon"></i>
                                 <div class="announcement-content">
-                                    <h3><?php echo htmlspecialchars($announcement['title']); ?></h3>
-                                    <p><?php echo htmlspecialchars($announcement['message']); ?></p>
-                                    <small><?php echo date('F j, Y, g:i a', strtotime($announcement['created_at'])); ?></small>
+                                    <p>
+                                        <?php echo htmlspecialchars($announcement['message']); ?>
+                                        <?php if ($announcement['tag']): ?>
+                                            <span class="announcement-tag <?php echo htmlspecialchars($announcement['tag']); ?>">
+                                                <?php echo htmlspecialchars(ucfirst($announcement['tag'])); ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </p>
+                                    <small>
+                                        Posted on <?php echo date('F j, Y', strtotime($announcement['announcement_date'])); ?>
+                                        at <?php echo date('g:i a', strtotime($announcement['created_at'])); ?>
+                                    </small>
                                 </div>
                                 <div class="announcement-actions">
                                     <button class="announcement-action-btn"><i class="fas fa-eye"></i></button>
@@ -1325,7 +1277,6 @@ $philippineHolidays = [
                 </div>
             </div>
 
-            <!-- Stats Cards -->
             <div class="stats-card">
                 <div class="stats-header">
                     <h3 class="stats-title">Vacation Days Used</h3>
@@ -1351,7 +1302,6 @@ $philippineHolidays = [
                 <div class="stats-change"><i class="fas fa-arrow-up"></i> Days this year</div>
             </div>
 
-            <!-- Calendar Section -->
             <div class="calendar-section">
                 <div class="section-header">
                     <h2 class="section-title">Calendar</h2>
@@ -1376,7 +1326,6 @@ $philippineHolidays = [
                 <div class="calendar-days" id="calendarDays"></div>
             </div>
 
-            <!-- Time Off Section -->
             <div class="timeoff-section">
                 <div class="section-header">
                     <h2 class="section-title">Time Off</h2>
@@ -1409,42 +1358,52 @@ $philippineHolidays = [
         </div>
     </main>
 
-    <!-- Announcement Modal -->
-    <?php if ($currentUser['role'] === 'admin'): ?>
+    <?php if (in_array($currentUser['role'], ['admin', 'hr'])): ?>
         <div class="modal" id="announcementModal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h2 class="modal-title">Post New Announcement</h2>
-                    <button class="modal-close" id="closeAnnouncementModal">&times;</button>
+                    <h3 class="modal-title">Create Announcement</h3>
+                    <button class="modal-close" id="closeAnnouncementModal">×</button>
                 </div>
-                <form id="announcementForm" method="POST">
+                <form id="announcementForm">
                     <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                    <input type="hidden" name="submit_announcement" value="1">
                     <div class="form-group">
-                        <label for="announcement_title">Title</label>
-                        <input type="text" id="announcement_title" name="announcement_title" class="form-control" required>
+                        <label for="announcementMessage">Message</label>
+                        <textarea class="form-control" id="announcementMessage" name="message" rows="4" required></textarea>
                     </div>
                     <div class="form-group">
-                        <label for="announcement_message">Message</label>
-                        <textarea id="announcement_message" name="announcement_message" class="form-control" required></textarea>
+                        <label for="announcementDate">Announcement Date</label>
+                        <input type="text" class="form-control flatpickr-input" id="announcementDate" name="announcement_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="announcementTag">Tag</label>
+                        <select class="form-control" id="announcementTag" name="tag" required>
+                            <option value="">Select tag</option>
+                            <option value="important">Important</option>
+                            <option value="critical">Critical</option>
+                            <option value="minor">Minor Issues</option>
+                            <option value="employee">Employee Stuff</option>
+                        </select>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline" id="cancelAnnouncement">Cancel</button>
-                        <button type="submit" name="submit_announcement" class="btn btn-primary">Post</button>
+                        <button type="submit" class="btn btn-primary">Submit Announcement</button>
                     </div>
                 </form>
             </div>
         </div>
     <?php endif; ?>
 
-    <!-- Time Off Request Modal -->
     <div class="modal" id="timeOffModal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title">Request Time Off</h2>
-                <button class="modal-close" id="closeTimeOffModal">&times;</button>
+                <button class="modal-close" id="closeTimeOffModal">×</button>
             </div>
-            <form id="timeOffForm" method="POST">
+            <form id="timeOffForm">
                 <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                <input type="hidden" name="submit_time_off" value="1">
                 <div class="form-group">
                     <label for="leave_type">Leave Type</label>
                     <select id="leave_type" name="leave_type" class="form-control" required>
@@ -1457,11 +1416,11 @@ $philippineHolidays = [
                 </div>
                 <div class="form-group">
                     <label for="start_date">Start Date</label>
-                    <input type="text" id="start_date" name="start_date" class="form-control flatpickr" required>
+                    <input type="text" id="start_date" name="start_date" class="form-control flatpickr-input" required>
                 </div>
                 <div class="form-group">
                     <label for="end_date">End Date</label>
-                    <input type="text" id="end_date" name="end_date" class="form-control flatpickr" required>
+                    <input type="text" id="end_date" name="end_date" class="form-control flatpickr-input" required>
                 </div>
                 <div class="form-group">
                     <label for="notes">Notes (Optional)</label>
@@ -1469,18 +1428,17 @@ $philippineHolidays = [
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline" id="cancelTimeOff">Cancel</button>
-                    <button type="submit" name="submit_time_off" class="btn btn-primary">Submit</button>
+                    <button type="submit" class="btn btn-primary">Submit</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Holiday Modal -->
     <div class="holiday-modal" id="holidayModal">
         <div class="holiday-modal-content">
             <div class="holiday-modal-header">
                 <h2 class="holiday-modal-title">Philippine Holidays 2025</h2>
-                <button class="holiday-modal-close" id="closeHolidayModal">&times;</button>
+                <button class="holiday-modal-close" id="closeHolidayModal">×</button>
             </div>
             <div class="holiday-modal-body">
                 <?php foreach ($philippineHolidays as $holiday): ?>
@@ -1499,18 +1457,11 @@ $philippineHolidays = [
         </div>
     </div>
 
-    <!-- Notification -->
-    <?php if ($announcementSuccess || $announcementError): ?>
-        <div class="update-notification <?php echo $announcementSuccess ? 'alert-success' : 'alert-error'; ?>">
-            <i class="fas fa-<?php echo $announcementSuccess ? 'check-circle' : 'exclamation-circle'; ?>"></i>
-            <span><?php echo htmlspecialchars($announcementSuccess ?? $announcementError); ?></span>
-            <button class="close-notification" id="closeNotification">&times;</button>
-        </div>
-    <?php endif; ?>
+    <div id="notificationContainer"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script>
-        // Update current time
         function updateTime() {
             const timeElement = document.getElementById('currentTime');
             if (timeElement) {
@@ -1525,7 +1476,6 @@ $philippineHolidays = [
         setInterval(updateTime, 1000);
         updateTime();
 
-        // Sidebar toggle
         const sidebar = document.querySelector('.sidebar');
         const sidebarToggle = document.getElementById('sidebarToggle');
         sidebarToggle.addEventListener('click', () => {
@@ -1534,7 +1484,6 @@ $philippineHolidays = [
             sidebarToggle.querySelector('i').classList.toggle('fa-chevron-right');
         });
 
-        // Modal handling
         function openModal(modalId) {
             const modal = document.getElementById(modalId);
             if (modal) {
@@ -1550,24 +1499,49 @@ $philippineHolidays = [
             }
         }
 
-        // Announcement modal
-        <?php if ($currentUser['role'] === 'admin'): ?>
+        <?php if (in_array($currentUser['role'], ['admin', 'hr'])): ?>
             document.getElementById('openAnnouncementModal')?.addEventListener('click', () => openModal('announcementModal'));
             document.getElementById('closeAnnouncementModal')?.addEventListener('click', () => closeModal('announcementModal'));
             document.getElementById('cancelAnnouncement')?.addEventListener('click', () => closeModal('announcementModal'));
+
+            document.getElementById('announcementForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const form = this;
+                const formData = new FormData(form);
+                
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    showNotification(data.message, data.success ? 'success' : 'error');
+                    if (data.success) {
+                        closeModal('announcementModal');
+                        form.reset();
+                        setTimeout(() => location.reload(), 2000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showNotification('An error occurred while submitting the announcement. Please try again.', 'error');
+                });
+            });
         <?php endif; ?>
 
-        // Time off modal
         document.getElementById('requestTimeOff')?.addEventListener('click', () => openModal('timeOffModal'));
         document.getElementById('closeTimeOffModal')?.addEventListener('click', () => closeModal('timeOffModal'));
         document.getElementById('cancelTimeOff')?.addEventListener('click', () => closeModal('timeOffModal'));
 
-        // Holiday modal
         document.getElementById('viewHolidays')?.addEventListener('click', () => openModal('holidayModal'));
         document.getElementById('closeHolidayModal')?.addEventListener('click', () => closeModal('holidayModal'));
         document.getElementById('closeHolidayModalFooter')?.addEventListener('click', () => closeModal('holidayModal'));
 
-        // Close modals on escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeModal('announcementModal');
@@ -1576,48 +1550,49 @@ $philippineHolidays = [
             }
         });
 
-        // Notification handling
-        document.getElementById('closeNotification')?.addEventListener('click', (e) => {
-            e.target.closest('.update-notification').remove();
-        });
-
-        // Flatpickr initialization
-        flatpickr('.flatpickr', {
+        flatpickr('.flatpickr-input', {
             dateFormat: 'Y-m-d',
             minDate: 'today'
         });
 
-        // Time off form submission
-        const timeOffForm = document.getElementById('timeOffForm');
-        timeOffForm?.addEventListener('submit', async (e) => {
+        document.getElementById('timeOffForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const formData = new FormData(timeOffForm);
+            const formData = new FormData(e.target);
             try {
                 const response = await fetch('Employeedashboard.php', {
                     method: 'POST',
                     body: formData
                 });
                 const result = await response.json();
-                const notification = document.createElement('div');
-                notification.className = `update-notification ${result.success ? 'alert-success' : 'alert-error'}`;
-                notification.innerHTML = `
-                    <i class="fas fa-${result.success ? 'check-circle' : 'exclamation-circle'}"></i>
-                    <span>${result.message}</span>
-                    <button class="close-notification">&times;</button>
-                `;
-                document.body.appendChild(notification);
-                notification.querySelector('.close-notification').addEventListener('click', () => notification.remove());
+                showNotification(result.message, result.success ? 'success' : 'error');
                 if (result.success) {
-                    timeOffForm.reset();
+                    e.target.reset();
                     closeModal('timeOffModal');
-                    setTimeout(() => notification.remove(), 3000);
                 }
             } catch (error) {
                 console.error('Error submitting time off request:', error);
+                showNotification('An error occurred while submitting the request. Please try again.', 'error');
             }
         });
 
-        // Calendar functionality
+        function showNotification(message, type) {
+            const container = document.getElementById('notificationContainer');
+            const notification = document.createElement('div');
+            notification.className = `update-notification ${type === 'success' ? 'alert-success' : 'alert-error'}`;
+            notification.innerHTML = `
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i>
+                <span>${message}</span>
+                <button class="close-notification">×</button>
+            `;
+            container.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+            notification.querySelector('.close-notification').addEventListener('click', () => {
+                notification.remove();
+            });
+        }
+
         const calendarDays = document.getElementById('calendarDays');
         const currentMonthElement = document.getElementById('currentMonth');
         const prevMonthBtn = document.getElementById('prevMonth');
@@ -1639,7 +1614,6 @@ $philippineHolidays = [
             currentMonthElement.textContent = `${firstDay.toLocaleString('default', { month: 'long' })} ${currentYear}`;
             calendarDays.innerHTML = '';
 
-            // Previous month days
             for (let i = firstDayIndex; i > 0; i--) {
                 const day = document.createElement('div');
                 day.className = 'calendar-day other-month';
@@ -1647,7 +1621,6 @@ $philippineHolidays = [
                 calendarDays.appendChild(day);
             }
 
-            // Current month days
             for (let i = 1; i <= lastDate; i++) {
                 const day = document.createElement('div');
                 day.className = 'calendar-day';
@@ -1687,7 +1660,6 @@ $philippineHolidays = [
                 calendarDays.appendChild(day);
             }
 
-            // Next month days
             const remainingDays = 42 - (firstDayIndex + lastDate);
             for (let i = 1; i <= remainingDays; i++) {
                 const day = document.createElement('div');

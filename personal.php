@@ -55,7 +55,7 @@ try {
 
 if (!$user) {
     session_destroy();
-    header('Location: login.php?error=user_not_found');
+    header('Location: login.html?error=user_not_found');
     exit();
 }
 

@@ -1054,10 +1054,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 <?php endif; ?>
             </a>
             <a href="employeeView.php" class="menu-item">
-    <i class="fas fa-chart-line"></i>
-    <span class="menu-text">Performance</span>
-</a>
-
+                <i class="fas fa-chart-line"></i>
+                <span class="menu-text">Performance</span>
+            </a>
+            <a href="emergency.php" class="menu-item">
+                <i class="fas fa-bell"></i>
+                <span class="menu-text">Emergency</span>
+            </a>
             <a href="login.html" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>

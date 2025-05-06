@@ -56,7 +56,7 @@ function convertTo24Hour($time) {
 }
 
 // Function to calculate total hours worked
-function calculateTotalHours($clock_in, $clock_out, $break_duration) {
+function calculateTotalHours($clock_in, $clock_out) {
     $clock_in_time = strtotime($clock_in);
     $clock_out_time = strtotime($clock_out);
     
@@ -65,7 +65,7 @@ function calculateTotalHours($clock_in, $clock_out, $break_duration) {
     }
     
     $total_seconds = $clock_out_time - $clock_in_time;
-    $total_hours = ($total_seconds - ($break_duration * 60)) / 3600;
+    $total_hours = $total_seconds / 3600;
     
     return max(0, $total_hours); // Ensure we don't return negative hours
 }
@@ -104,7 +104,7 @@ if (isset($_GET['export'])) {
 }
 
 // Function to get timesheet data
-function getTimesheetData($pdo, $employee_id = null, $date = null, $sort = 'date_desc') {
+function getTimesheetData($pdo, $employee_id = null, $date = null, $sort = 'date_desc', $page = 1, $per_page = 10) {
     $whereClauses = [];
     $params = [];
     
@@ -146,20 +146,45 @@ function getTimesheetData($pdo, $employee_id = null, $date = null, $sort = 'date
             break;
     }
 
-    $query = "SELECT ts.id, e.first_name, e.last_name, ts.date, ts.clock_in, ts.clock_out,
-                     ts.break_duration, ts.total_hours
+    // Pagination
+    $offset = ($page - 1) * $per_page;
+    $query = "SELECT ts.id, e.first_name, e.last_name, ts.date, ts.clock_in, ts.clock_out, ts.total_hours
               FROM timesheets ts
               JOIN employees e ON ts.employee_id = e.id
               $whereSql
-              $orderBy";
-
+              $orderBy
+              LIMIT ? OFFSET ?";
+    
     $stmt = $pdo->prepare($query);
-    if (!empty($params)) {
-        $stmt->execute($params);
-    } else {
-        $stmt->execute();
+    
+    // Bind parameters
+    $param_index = 1;
+    foreach ($params as $param) {
+        $stmt->bindValue($param_index, $param);
+        $param_index++;
     }
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Explicitly bind LIMIT and OFFSET as integers
+    $stmt->bindValue($param_index, (int)$per_page, PDO::PARAM_INT);
+    $stmt->bindValue($param_index + 1, (int)$offset, PDO::PARAM_INT);
+    
+    $stmt->execute();
+    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Get total records for pagination
+    $count_query = "SELECT COUNT(*) as total
+                    FROM timesheets ts
+                    JOIN employees e ON ts.employee_id = e.id
+                    $whereSql";
+    $count_stmt = $pdo->prepare($count_query);
+    $count_stmt->execute($params);
+    $total_records = $count_stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    
+    return [
+        'data' => $data,
+        'total_records' => $total_records,
+        'per_page' => $per_page,
+        'current_page' => $page
+    ];
 }
 
 // Function to export as PDF
@@ -185,7 +210,6 @@ function exportAsPDF($data) {
             <th><b>Date</b></th>
             <th><b>Clock In</b></th>
             <th><b>Clock Out</b></th>
-            <th><b>Break (mins)</b></th>
             <th><b>Total Hours</b></th>
         </tr>';
    
@@ -196,7 +220,6 @@ function exportAsPDF($data) {
             <td>' . htmlspecialchars($row['date']) . '</td>
             <td>' . htmlspecialchars($row['clock_in']) . '</td>
             <td>' . htmlspecialchars($row['clock_out']) . '</td>
-            <td>' . htmlspecialchars($row['break_duration']) . '</td>
             <td>' . htmlspecialchars(formatTotalHours($row['total_hours'])) . '</td>
         </tr>';
     }
@@ -219,7 +242,6 @@ function exportAsExcel($data) {
             <th>Date</th>
             <th>Clock In</th>
             <th>Clock Out</th>
-            <th>Break (mins)</th>
             <th>Total Hours</th>
         </tr>';
    
@@ -229,7 +251,6 @@ function exportAsExcel($data) {
             <td>' . htmlspecialchars($row['date']) . '</td>
             <td>' . htmlspecialchars($row['clock_in']) . '</td>
             <td>' . htmlspecialchars($row['clock_out']) . '</td>
-            <td>' . htmlspecialchars($row['break_duration']) . '</td>
             <td>' . htmlspecialchars(formatTotalHours($row['total_hours'])) . '</td>
         </tr>';
     }
@@ -249,26 +270,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_timesheet'])) 
     $date = $_POST['date'];
     $clock_in = $_POST['clock_in'];
     $clock_out = $_POST['clock_out'];
-    $break_duration = intval($_POST['break_duration']);
     
     // Convert times to 24-hour format for comparison
     $clock_in_24 = convertTo24Hour($clock_in);
     $clock_out_24 = convertTo24Hour($clock_out);
     
     // Calculate total hours
-    $total_hours = calculateTotalHours($clock_in_24, $clock_out_24, $break_duration);
+    $total_hours = calculateTotalHours($clock_in_24, $clock_out_24);
     
     // Insert the timesheet record
     $insert_query = "INSERT INTO timesheets 
-                    (employee_id, date, clock_in, clock_out, break_duration, total_hours, status) 
-                    VALUES (?, ?, ?, ?, ?, ?, 'approved')";
+                    (employee_id, date, clock_in, clock_out, total_hours, status) 
+                    VALUES (?, ?, ?, ?, ?, 'approved')";
     $insert_stmt = $pdo->prepare($insert_query);
     $insert_stmt->execute([
         $employee_id,
         $date,
         $clock_in,
         $clock_out,
-        $break_duration,
         $total_hours
     ]);
     
@@ -280,6 +299,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_timesheet'])) 
 $search_employee_id = isset($_GET['employee_id']) ? intval($_GET['employee_id']) : null;
 $search_date = isset($_GET['date']) ? $_GET['date'] : null;
 $sort = isset($_GET['sort']) ? $_GET['sort'] : 'date_desc';
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$per_page = 10;
 
 // Validate date format if provided
 if ($search_date && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $search_date)) {
@@ -289,7 +310,10 @@ if ($search_date && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $search_date)) {
 // Log sort parameter for debugging
 error_log("Sort parameter received: " . $sort);
 
-$result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
+$timesheet_data = getTimesheetData($pdo, $search_employee_id, $search_date, $sort, $page, $per_page);
+$result = $timesheet_data['data'];
+$total_records = $timesheet_data['total_records'];
+$total_pages = ceil($total_records / $per_page);
 ?>
 
 <!DOCTYPE html>
@@ -319,6 +343,7 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
             --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0.3);
             --gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
             --reset-gradient: linear-gradient(135deg, #FF6B6B, #FF8E8E);
+            --export-gradient: linear-gradient(135deg, #28a745, #34c759);
         }
 
         * {
@@ -336,7 +361,6 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
             line-height: 1.6;
         }
 
-        /* Sidebar Styles */
         .sidebar {
             width: 260px;
             background: var(--gradient);
@@ -430,7 +454,6 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
             font-size: 18px;
         }
 
-        /* Main Content Styles */
         .main-content {
             flex: 1;
             overflow-y: auto;
@@ -469,6 +492,13 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
             font-family: 'Poppins', sans-serif;
             font-size: 24px;
             margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-header h2 i {
+            margin-right: 8px;
         }
 
         .close-btn {
@@ -517,11 +547,17 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
             margin-bottom: 30px;
             box-shadow: var(--shadow);
             transition: var(--transition);
+            border: 2px solid var(--secondary);
         }
 
         .search-card:hover {
             box-shadow: var(--shadow-hover);
             transform: translateY(-2px);
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
         }
 
         .form-label {
@@ -627,9 +663,11 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
         }
 
         .btn-export {
-            background: linear-gradient(135deg, #28a745, #34c759);
+            background: var(--export-gradient);
             color: var(--white);
             box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
         }
 
         .btn-export:hover {
@@ -638,37 +676,104 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
             transform: translateY(-2px);
         }
 
+        .btn-export::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s ease, height 0.6s ease;
+        }
+
+        .btn-export:hover::before {
+            width: 200px;
+            height: 200px;
+        }
+
         .table-responsive {
             border-radius: var(--border-radius);
-            overflow: hidden;
+            overflow-x: auto;
             box-shadow: var(--shadow);
+            max-height: 600px;
+            overflow-y: auto;
         }
 
         .table {
             margin-bottom: 0;
             width: 100%;
+            border-collapse: collapse;
         }
 
         .table thead th {
             background: var(--primary);
             color: var(--white);
-            padding: 12px;
+            padding: 14px;
             font-weight: 600;
             text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-bottom: 2px solid var(--primary-dark);
         }
 
         .table tbody tr {
             transition: var(--transition);
         }
 
+        .table tbody tr:nth-child(even) {
+            background: var(--light);
+        }
+
         .table tbody tr:hover {
-            background: rgba(191, 162, 219, 0.1);
+            background: rgba(191, 162, 219, 0.2);
+            transform: scale(1.01);
         }
 
         .table td {
-            padding: 12px;
+            padding: 14px;
             vertical-align: middle;
             border-top: 1px solid var(--gray);
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .pagination a {
+            padding: 10px 16px;
+            border-radius: var(--border-radius);
+            background: var(--gradient);
+            color: var(--white);
+            text-decoration: none;
+            font-size: 14px;
+            transition: var(--transition);
+            box-shadow: var(--shadow);
+        }
+
+        .pagination a:hover {
+            background: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .pagination a.disabled {
+            background: var(--gray);
+            cursor: not-allowed;
+            box-shadow: none;
+            opacity: 0.6;
+        }
+
+        .pagination a.active {
+            background: var(--secondary);
+            font-weight: 600;
         }
 
         @keyframes fadeIn {
@@ -683,6 +788,9 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
             }
             .card-body {
                 padding: 20px;
+            }
+            .table-responsive {
+                max-height: none;
             }
         }
 
@@ -701,8 +809,12 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
             .main-content {
                 margin-left: 0;
             }
-            .form-grid {
+            .search-card form {
                 grid-template-columns: 1fr;
+            }
+            .table th, .table td {
+                padding: 10px;
+                font-size: 12px;
             }
         }
 
@@ -715,7 +827,6 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-header">
             <div class="logo">
@@ -770,17 +881,15 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
         </nav>
     </aside>
 
-    <!-- Main Content -->
     <main class="main-content">
         <div class="content">
             <div class="card">
                 <div class="card-header position-relative">
-                    <h2><i class="fas fa-clock me-2"></i>Timesheet Management</h2>
-                    <a href="dashboard.php" class="close-btn"><i class="fas fa-times"></i></a>
+                    <h2><i class="fas fa-clock"></i>Timesheet Management</h2>
+                    <a href="dashboard.php" class="close-btn" aria-label="Close timesheet management"><i class="fas fa-times"></i></a>
                 </div>
                 
                 <div class="card-body">
-                    <!-- Display success message if submission was successful -->
                     <?php if (isset($_GET['success']) && $_GET['success'] === '1'): ?>
                         <div class="alert-success" role="alert">
                             <i class="fas fa-check-circle"></i>
@@ -788,12 +897,11 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
                         </div>
                     <?php endif; ?>
                     
-                    <!-- Search Form -->
                     <div class="search-card">
-                        <form action="timesheet.php" method="GET" class="form-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
-                            <div>
+                        <form action="timesheet.php" method="GET" style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="form-group">
                                 <label for="employee_id" class="form-label">Employee</label>
-                                <select name="employee_id" id="employee_id" class="form-select">
+                                <select name="employee_id" id="employee_id" class="form-select" aria-label="Select employee">
                                     <option value="">All Employees</option>
                                     <?php
                                     $employeeQuery = "SELECT id, first_name, last_name FROM employees ORDER BY last_name, first_name";
@@ -807,14 +915,14 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
                                 </select>
                             </div>
                             
-                            <div>
+                            <div class="form-group">
                                 <label for="date" class="form-label">Date</label>
-                                <input type="date" id="date" name="date" class="form-control" value="<?php echo htmlspecialchars($search_date); ?>">
+                                <input type="date" id="date" name="date" class="form-control" value="<?php echo htmlspecialchars($search_date); ?>" aria-label="Select date">
                             </div>
                             
-                            <div>
+                            <div class="form-group">
                                 <label for="sort" class="form-label">Sort By</label>
-                                <select name="sort" id="sort" class="form-select">
+                                <select name="sort" id="sort" class="form-select" aria-label="Select sort order">
                                     <option value="date_desc" <?php echo $sort === 'date_desc' ? 'selected' : ''; ?>>Date (Newest First)</option>
                                     <option value="date_asc" <?php echo $sort === 'date_asc' ? 'selected' : ''; ?>>Date (Oldest First)</option>
                                     <option value="name_asc" <?php echo $sort === 'name_asc' ? 'selected' : ''; ?>>Name (A-Z)</option>
@@ -822,40 +930,34 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
                                 </select>
                             </div>
                             
-                            <div style="display: flex; align-items: flex-end; gap: 10px;">
-                                <button type="submit" class="btn btn-primary w-100">
+                            <div style="display: flex; gap: 10px;">
+                                <button type="submit" class="btn btn-primary" style="flex: 1;" aria-label="Search timesheets">
                                     <i class="fas fa-search me-2"></i>Search
                                 </button>
-                                <a href="timesheet.php?sort=date_desc" class="btn btn-reset w-100">
-                                    <i class="fas fa-undo me-2"></i>Reset Filter
+                                <a href="timesheet.php?sort=date_desc" class="btn btn-reset" style="flex: 1;" aria-label="Reset filters">
+                                    <i class="fas fa-undo me-2"></i>Reset
                                 </a>
                             </div>
                         </form>
                     </div>
                     
-                    <!-- Export Buttons -->
-                    <div class="d-flex justify-content-end mb-4 gap-2">
-                        <a href="?export=pdf&employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>&sort=<?php echo urlencode($sort); ?>"
-                           class="btn btn-export">
-                            <i class="fas fa-file-pdf me-2"></i>Export as PDF
-                        </a>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 20px;">
+                        
                         <a href="?export=excel&employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>&sort=<?php echo urlencode($sort); ?>"
-                           class="btn btn-export">
-                            <i class="fas fa-file-excel me-2"></i>Export as Excel
+                           class="btn btn-export" aria-label="Export as Excel">
+                            <i class="fas fa-file-excel me-2"></i>Excel
                         </a>
                     </div>
                     
-                    <!-- Timesheet Table -->
                     <div class="table-responsive">
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>Employee</th>
-                                    <th>Date</th>
-                                    <th>Clock In</th>
-                                    <th>Clock Out</th>
-                                    <th>Break (mins)</th>
-                                    <th>Total Hours</th>
+                                    <th><i class="fas fa-user me-2"></i>Employee</th>
+                                    <th><i class="fas fa-calendar me-2"></i>Date</th>
+                                    <th><i class="fas fa-clock me-2"></i>Clock In</th>
+                                    <th><i class="fas fa-clock me-2"></i>Clock Out</th>
+                                    <th><i class="fas fa-hourglass me-2"></i>Total Hours</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -866,18 +968,34 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
                                             <td><?php echo htmlspecialchars($row['date']); ?></td>
                                             <td><?php echo htmlspecialchars($row['clock_in']); ?></td>
                                             <td><?php echo htmlspecialchars($row['clock_out']); ?></td>
-                                            <td><?php echo htmlspecialchars($row['break_duration']); ?></td>
                                             <td><?php echo htmlspecialchars(formatTotalHours($row['total_hours'])); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="6" class="text-center py-4">No timesheet records found</td>
+                                        <td colspan="5" class="text-center py-4">No timesheet records found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
+
+                    <?php if ($total_pages > 1): ?>
+                        <div class="pagination">
+                            <?php
+                            $prev_disabled = $page <= 1 ? 'disabled' : '';
+                            $next_disabled = $page >= $total_pages ? 'disabled' : '';
+                            ?>
+                            <a href="?employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>&sort=<?php echo urlencode($sort); ?>&page=<?php echo $page - 1; ?>"
+                               class="<?php echo $prev_disabled; ?>" aria-label="Previous page">Previous</a>
+                            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                                <a href="?employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>&sort=<?php echo urlencode($sort); ?>&page=<?php echo $i; ?>"
+                                   class="<?php echo $i === $page ? 'active' : ''; ?>" aria-label="Page <?php echo $i; ?>"><?php echo $i; ?></a>
+                            <?php endfor; ?>
+                            <a href="?employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>&sort=<?php echo urlencode($sort); ?>&page=<?php echo $page + 1; ?>"
+                               class="<?php echo $next_disabled; ?>" aria-label="Next page">Next</a>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -885,12 +1003,10 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script>
-        // Sidebar Toggle
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('collapsed');
         });
 
-        // Set today's date as default if no date is selected
         document.addEventListener('DOMContentLoaded', function() {
             const dateInput = document.getElementById('date');
             if (!dateInput.value) {
@@ -898,7 +1014,6 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
                 dateInput.value = today;
             }
 
-            // Auto-dismiss alerts after 5 seconds
             const alert = document.querySelector('.alert-success');
             if (alert) {
                 setTimeout(() => {

@@ -1,5 +1,4 @@
 <?php
-
 // Start the session with secure settings
 session_set_cookie_params([
     'lifetime' => 0,
@@ -58,9 +57,103 @@ if (!$currentUser) {
     exit();
 }
 
+// Delete expired announcements (older than announcement_date)
+try {
+    $deleteStmt = $pdo->prepare("
+        DELETE FROM announcements 
+        WHERE announcement_date < CURDATE()
+    ");
+    $deleteStmt->execute();
+} catch (PDOException $e) {
+    error_log("Failed to delete expired announcements: " . $e->getMessage());
+}
+
+// Handle announcement deletion (via AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_announcement']) && ($currentUser['role'] === 'admin' || $currentUser['role'] === 'hr')) {
+    header('Content-Type: application/json');
+    
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
+        exit();
+    }
+
+    $announcement_id = filter_var($_POST['announcement_id'] ?? '', FILTER_SANITIZE_NUMBER_INT);
+
+    if (empty($announcement_id)) {
+        echo json_encode(['success' => false, 'message' => 'Announcement ID is required.']);
+        exit();
+    }
+
+    try {
+        $deleteStmt = $pdo->prepare("
+            DELETE FROM announcements 
+            WHERE id = ?
+        ");
+        $success = $deleteStmt->execute([$announcement_id]);
+        
+        if ($success) {
+            echo json_encode(['success' => true, 'message' => 'Announcement deleted successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to delete announcement.']);
+        }
+    } catch (PDOException $e) {
+        error_log("Announcement deletion failed: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Database error occurred.']);
+    }
+    exit();
+}
+
 // Fetch announcements
-$announcementsStmt = $pdo->query("SELECT message, created_at FROM announcements ORDER BY created_at DESC LIMIT 1");
+$announcementsStmt = $pdo->query("SELECT id, message, created_at, tag FROM announcements ORDER BY created_at DESC LIMIT 1");
 $latestAnnouncement = $announcementsStmt->fetch(PDO::FETCH_ASSOC);
+
+// Handle announcement submission (via AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_announcement']) && ($currentUser['role'] === 'admin' || $currentUser['role'] === 'hr')) {
+    header('Content-Type: application/json');
+    
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
+        exit();
+    }
+
+    $message = filter_var($_POST['message'] ?? '', FILTER_SANITIZE_STRING);
+    $announcement_date = filter_var($_POST['announcement_date'] ?? '', FILTER_SANITIZE_STRING);
+    $tag = filter_var($_POST['tag'] ?? '', FILTER_SANITIZE_STRING);
+
+    if (empty($message) || empty($announcement_date)) {
+        echo json_encode(['success' => false, 'message' => 'Message and date are required.']);
+        exit();
+    }
+
+    if (!in_array($tag, ['important', 'critical', 'minor', 'employee'])) {
+        echo json_encode(['success' => false, 'message' => 'Invalid tag selected.']);
+        exit();
+    }
+
+    if (!DateTime::createFromFormat('Y-m-d', $announcement_date)) {
+        echo json_encode(['success' => false, 'message' => 'Invalid date format.']);
+        exit();
+    }
+
+    try {
+        $insertStmt = $pdo->prepare("
+            INSERT INTO announcements 
+            (message, tag, announcement_date, created_at) 
+            VALUES (?, ?, ?, NOW())
+        ");
+        $success = $insertStmt->execute([$message, $tag, $announcement_date]);
+        
+        if ($success) {
+            echo json_encode(['success' => true, 'message' => 'Announcement created successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to create announcement.']);
+        }
+    } catch (PDOException $e) {
+        error_log("Announcement insertion failed: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Database error occurred.']);
+    }
+    exit();
+}
 
 // Fetch employee count
 $employeeCountStmt = $pdo->query("SELECT COUNT(*) as total FROM employees");
@@ -221,7 +314,6 @@ $philippineHolidays = [
         line-height: 1.6;
     }
 
-    /* Sidebar Styles */
     .sidebar {
         width: 260px;
         background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
@@ -313,7 +405,6 @@ $philippineHolidays = [
         font-size: 18px;
     }
 
-    /* Main Content Styles */
     .main-content {
         flex: 1;
         overflow-y: auto;
@@ -321,7 +412,6 @@ $philippineHolidays = [
         background-color: var(--white);
     }
 
-    /* Header Styles */
     .header {
         display: flex;
         justify-content: space-between;
@@ -376,7 +466,6 @@ $philippineHolidays = [
         font-size: 16px;
     }
 
-    /* Dashboard Grid */
     .dashboard-grid {
         display: grid;
         grid-template-columns: repeat(12, 1fr);
@@ -386,16 +475,33 @@ $philippineHolidays = [
         margin: 0 auto;
     }
 
-    /* Announcement Banner */
     .announcement-banner {
         grid-column: 1 / -1;
-        background-color: var(--light);
+        background: linear-gradient(135deg, var(--primary-light) 0%, var(--secondary) 100%);
         border-radius: var(--border-radius);
-        padding: 20px;
+        padding: 24px;
         display: flex;
         align-items: center;
         box-shadow: var(--shadow);
         transition: var(--transition);
+        cursor: pointer;
+        position: relative;
+        animation: fadeIn 0.5s ease-in;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .announcement-banner.important, .announcement-banner.critical {
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0% { box-shadow: var(--shadow); }
+        50% { box-shadow: 0 8px 24px rgba(191, 162, 219, 0.3); }
+        100% { box-shadow: var(--shadow); }
     }
 
     .announcement-banner:hover {
@@ -404,31 +510,101 @@ $philippineHolidays = [
     }
 
     .announcement-icon {
-        font-size: 24px;
-        color: var(--primary);
-        margin-right: 15px;
+        font-size: 28px;
+        color: var(--white);
+        margin-right: 20px;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+    }
+
+    .announcement-text {
+        flex: 1;
     }
 
     .announcement-text h3 {
         font-family: 'Poppins', sans-serif;
-        font-size: 18px;
-        color: var(--text);
-        margin-bottom: 5px;
+        font-size: 20px;
+        color: var(--white);
+        margin-bottom: 8px;
+        font-weight: 600;
     }
 
     .announcement-text p {
-        font-size: 14px;
-        color: var(--text-light);
-        max-width: 80%;
-    }
-
-    .announcement-banner i.fas.fa-chevron-right {
-        margin-left: auto;
-        color: var(--text-light);
         font-size: 16px;
+        color: var(--white);
+        max-width: 90%;
+        line-height: 1.8;
+        opacity: 0.9;
     }
 
-    /* Stats Cards */
+    .announcement-tag {
+        font-size: 13px;
+        padding: 6px 12px;
+        border-radius: var(--border-radius);
+        margin-left: 10px;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    .announcement-tag.important {
+        background-color: var(--error);
+        color: var(--white);
+    }
+
+    .announcement-tag.critical {
+        background-color: var(--secondary);
+        color: var(--primary-dark);
+    }
+
+    .announcement-tag.minor {
+        background-color: var(--success);
+        color: var(--white);
+    }
+
+    .announcement-tag.employee {
+        background-color: var(--primary);
+        color: var(--white);
+    }
+
+    .announcement-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-left: auto;
+    }
+
+    .announcement-action-btn {
+        padding: 10px 20px;
+        border-radius: var(--border-radius);
+        font-size: 14px;
+        cursor: pointer;
+        transition: var(--transition);
+        font-weight: 500;
+        background-color: var(--white);
+        color: var(--primary);
+        border: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .announcement-action-btn:hover {
+        background-color: var(--light);
+        color: var(--primary-light);
+        box-shadow: var(--shadow-hover);
+    }
+
+    .delete-announcement {
+        background: none;
+        border: none;
+        font-size: 16px;
+        color: var(--white);
+        opacity: 0.7;
+        cursor: pointer;
+    }
+
+    .delete-announcement:hover {
+        color: var(--error);
+        opacity: 1;
+    }
+
     .stats-card {
         grid-column: span 3;
         background-color: var(--white);
@@ -507,7 +683,6 @@ $philippineHolidays = [
         color: var(--error);
     }
 
-    /* Calendar Section */
     .calendar-section {
         grid-column: span 8;
         background-color: var(--white);
@@ -712,7 +887,6 @@ $philippineHolidays = [
         color: var(--text);
     }
 
-    /* Time Off Section */
     .timeoff-section {
         grid-column: span 4;
         background-color: var(--white);
@@ -768,7 +942,6 @@ $philippineHolidays = [
         gap: 12px;
     }
 
-    /* Interviews Section */
     .interviews-section {
         grid-column: span 6;
         background-color: var(--white);
@@ -861,7 +1034,6 @@ $philippineHolidays = [
         flex-shrink: 0;
     }
 
-    /* Modal Styles */
     .modal {
         position: fixed;
         top: 0;
@@ -965,7 +1137,6 @@ $philippineHolidays = [
         gap: 10px;
     }
 
-    /* Holiday Modal */
     .holiday-modal {
         position: fixed;
         top: 0;
@@ -1067,7 +1238,6 @@ $philippineHolidays = [
         justify-content: flex-end;
     }
 
-    /* Notification Styles */
     .update-notification {
         position: fixed;
         bottom: 20px;
@@ -1112,7 +1282,6 @@ $philippineHolidays = [
         color: var(--primary);
     }
 
-    /* Responsive Styles */
     @media (max-width: 1400px) {
         .stats-card {
             grid-column: span 6;
@@ -1141,6 +1310,24 @@ $philippineHolidays = [
         .dashboard-grid {
             padding: 20px;
         }
+        .announcement-banner {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 20px;
+        }
+        .announcement-text p {
+            max-width: 100%;
+            margin-bottom: 15px;
+        }
+        .announcement-actions {
+            margin-left: 0;
+            width: 100%;
+            justify-content: flex-end;
+        }
+        .announcement-action-btn {
+            padding: 8px 16px;
+            font-size: 13px;
+        }
     }
 
     @media (max-width: 768px) {
@@ -1168,9 +1355,34 @@ $philippineHolidays = [
             width: 100%;
             justify-content: space-between;
         }
+        .announcement-text h3 {
+            font-size: 18px;
+        }
+        .announcement-text p {
+            font-size: 14px;
+        }
+        .announcement-icon {
+            font-size: 24px;
+            margin-right: 15px;
+        }
     }
 
-    /* Alert Styles */
+    @media (max-width: 576px) {
+        .announcement-action-btn {
+            padding: 7px 14px;
+            font-size: 12px;
+        }
+        .delete-announcement {
+            font-size: 14px;
+        }
+        .announcement-text h3 {
+            font-size: 16px;
+        }
+        .announcement-text p {
+            font-size: 13px;
+        }
+    }
+
     .alert-success {
         background-color: rgba(75, 181, 67, 0.1);
         color: var(--success);
@@ -1189,10 +1401,9 @@ $philippineHolidays = [
             transition-duration: 0.01ms !important;
         }
     }
-</style>
+    </style>
 </head>
 <body>
-    <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-header">
             <div class="logo">
@@ -1247,9 +1458,7 @@ $philippineHolidays = [
         </nav>
     </aside>
 
-    <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
         <header class="header">
             <div class="header-title">
                 <h1>HR Dashboard</h1>
@@ -1274,19 +1483,33 @@ $philippineHolidays = [
             </div>
         </header>
 
-        <!-- Dashboard Grid -->
         <div class="dashboard-grid">
-            <!-- Announcement Banner -->
-            <section class="announcement-banner">
+            <section class="announcement-banner <?php echo htmlspecialchars($latestAnnouncement['tag'] ?? ''); ?>" id="announcementBanner">
                 <i class="fas fa-bullhorn announcement-icon"></i>
                 <div class="announcement-text">
                     <h3>Today's Announcements</h3>
-                    <p><?php echo htmlspecialchars($latestAnnouncement['message'] ?? 'No announcements today'); ?></p>
+                    <p id="announcementMessage"><?php echo htmlspecialchars($latestAnnouncement['message'] ?? 'No announcements today'); ?>
+                        <?php if ($latestAnnouncement['tag']): ?>
+                            <span class="announcement-tag <?php echo htmlspecialchars($latestAnnouncement['tag']); ?>">
+                                <?php echo htmlspecialchars(ucfirst($latestAnnouncement['tag'])); ?>
+                            </span>
+                        <?php endif; ?>
+                    </p>
                 </div>
-                <i class="fas fa-chevron-right"></i>
+                <div class="announcement-actions">
+                    <?php if ($currentUser['role'] === 'admin' || $currentUser['role'] === 'hr'): ?>
+                        <button class="announcement-action-btn" id="addAnnouncementBtn">
+                            <i class="fas fa-plus"></i> Add Announcement
+                        </button>
+                        <?php if ($latestAnnouncement): ?>
+                            <button class="announcement-action-btn delete-announcement" data-id="<?php echo $latestAnnouncement['id']; ?>">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
             </section>
 
-            <!-- Payroll Card -->
             <section class="stats-card">
                 <div class="stats-header">
                     <span class="stats-title">Payroll</span>
@@ -1300,7 +1523,6 @@ $philippineHolidays = [
                 </div>
             </section>
 
-            <!-- Employee Count Card -->
             <section class="stats-card">
                 <div class="stats-header">
                     <span class="stats-title">Total Employees</span>
@@ -1317,7 +1539,6 @@ $philippineHolidays = [
                 </div>
             </section>
 
-            <!-- Working Days Card -->
             <section class="stats-card">
                 <div class="stats-header">
                     <span class="stats-title">Working Days</span>
@@ -1331,7 +1552,6 @@ $philippineHolidays = [
                 </div>
             </section>
 
-            <!-- Payroll Processed Card -->
             <section class="stats-card">
                 <div class="stats-header">
                     <span class="stats-title">Payroll Processed</span>
@@ -1348,7 +1568,6 @@ $philippineHolidays = [
                 </div>
             </section>
 
-            <!-- Calendar Section -->
             <section class="calendar-section">
                 <div class="section-header">
                     <h2 class="section-title">Calendar</h2>
@@ -1370,17 +1589,7 @@ $philippineHolidays = [
                     <div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div>
                 </div>
                 <div class="calendar-days" id="calendarDays"></div>
-                <div class="calendar-legend">
-                    <div class="legend-item">
-                        <span class="legend-color legend-today"></span> Today
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-color legend-holiday"></span> Holiday
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-color legend-event"></span> Event
-                    </div>
-                </div>
+                
                 <div class="time-details">
                     <div class="time-detail">
                         <span class="time-label">Start Time</span>
@@ -1397,7 +1606,6 @@ $philippineHolidays = [
                 </div>
             </section>
 
-            <!-- Time Off Section -->
             <section class="timeoff-section">
                 <div class="section-header">
                     <h2 class="section-title">Time Off</h2>
@@ -1435,7 +1643,6 @@ $philippineHolidays = [
                 </div>
             </section>
 
-            <!-- Interviews Section -->
             <section class="interviews-section">
                 <div class="section-header">
                     <h2 class="section-title">Interviews</h2>
@@ -1467,7 +1674,6 @@ $philippineHolidays = [
         </div>
     </main>
 
-    <!-- Time Off Request Modal -->
     <div class="modal" id="timeOffRequestModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1508,7 +1714,6 @@ $philippineHolidays = [
         </div>
     </div>
 
-    <!-- Time Off Approval Modal -->
     <?php if ($currentUser['role'] === 'admin' || $currentUser['role'] === 'hr'): ?>
     <div class="modal" id="timeOffApproveModal">
         <div class="modal-content">
@@ -1565,9 +1770,43 @@ $philippineHolidays = [
             </div>
         </div>
     </div>
+
+    <div class="modal" id="announcementModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Create Announcement</h3>
+                <button class="modal-close" id="closeAnnouncementModal">×</button>
+            </div>
+            <form id="announcementForm">
+                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                <input type="hidden" name="submit_announcement" value="1">
+                <div class="form-group">
+                    <label for="announcementMessage">Message</label>
+                    <textarea class="form-control" id="announcementMessage" name="message" rows="4" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="announcementDate">Announcement Date</label>
+                    <input type="text" class="form-control flatpickr-input" id="announcementDate" name="announcement_date" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcementTag">Tag</label>
+                    <select class="form-control" id="announcementTag" name="tag" required>
+                        <option value="">Select tag</option>
+                        <option value="important">Important</option>
+                        <option value="critical">Critical</option>
+                        <option value="minor">Minor Issues</option>
+                        <option value="employee">Employee Stuff</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" id="cancelAnnouncement">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Announcement</button>
+                </div>
+            </form>
+        </div>
+    </div>
     <?php endif; ?>
 
-    <!-- Holiday Modal -->
     <div class="holiday-modal" id="holidayModal">
         <div class="holiday-modal-content">
             <div class="holiday-modal-header">
@@ -1590,18 +1829,15 @@ $philippineHolidays = [
         </div>
     </div>
 
-    <!-- Notification Container -->
     <div id="notificationContainer"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script>
-        // Sidebar Toggle
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('collapsed');
         });
 
-        // Current Time Update
         function updateTime() {
             const timeElement = document.getElementById('currentTime');
             const now = new Date();
@@ -1618,10 +1854,9 @@ $philippineHolidays = [
         setInterval(updateTime, 1000);
         updateTime();
 
-        // Modal Controls
         const timeOffRequestModal = document.getElementById('timeOffRequestModal');
-        const timeOffApproveModal = document.getElementById('timeOffApproveModal');
         const holidayModal = document.getElementById('holidayModal');
+        const announcementModal = document.getElementById('announcementModal');
 
         document.getElementById('requestTimeOffBtn').addEventListener('click', () => {
             timeOffRequestModal.classList.add('active');
@@ -1637,19 +1872,7 @@ $philippineHolidays = [
 
         if (document.getElementById('approveTimeOffBtn')) {
             document.getElementById('approveTimeOffBtn').addEventListener('click', () => {
-                timeOffApproveModal.classList.add('active');
-            });
-        }
-
-        if (document.getElementById('closeApproveModal')) {
-            document.getElementById('closeApproveModal').addEventListener('click', () => {
-                timeOffApproveModal.classList.remove('active');
-            });
-        }
-
-        if (document.getElementById('cancelApprove')) {
-            document.getElementById('cancelApprove').addEventListener('click', () => {
-                timeOffApproveModal.classList.remove('active');
+                window.location.href = 'timeoff.php';
             });
         }
 
@@ -1661,13 +1884,25 @@ $philippineHolidays = [
             holidayModal.classList.remove('active');
         });
 
-        // Flatpickr for Date Inputs
+        if (announcementModal) {
+            document.getElementById('addAnnouncementBtn').addEventListener('click', () => {
+                announcementModal.classList.add('active');
+            });
+
+            document.getElementById('closeAnnouncementModal').addEventListener('click', () => {
+                announcementModal.classList.remove('active');
+            });
+
+            document.getElementById('cancelAnnouncement').addEventListener('click', () => {
+                announcementModal.classList.remove('active');
+            });
+        }
+
         flatpickr('.flatpickr-input', {
             dateFormat: 'Y-m-d',
             minDate: 'today'
         });
 
-        // Time Off Request Form Submission
         document.getElementById('timeOffRequestForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const form = this;
@@ -1697,7 +1932,71 @@ $philippineHolidays = [
             });
         });
 
-        // Notification Function
+        if (document.getElementById('announcementForm')) {
+            document.getElementById('announcementForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const form = this;
+                const formData = new FormData(form);
+                
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    showNotification(data.message, data.success ? 'success' : 'error');
+                    if (data.success) {
+                        announcementModal.classList.remove('active');
+                        form.reset();
+                        setTimeout(() => location.reload(), 2000);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showNotification('An error occurred while submitting the announcement. Please try again.', 'error');
+                });
+            });
+        }
+
+        document.querySelectorAll('.delete-announcement').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (confirm('Are you sure you want to delete this announcement?')) {
+                    const announcementId = this.getAttribute('data-id');
+                    const formData = new FormData();
+                    formData.append('delete_announcement', '1');
+                    formData.append('announcement_id', announcementId);
+                    formData.append('csrf_token', '<?php echo $_SESSION['csrf_token']; ?>');
+
+                    fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        showNotification(data.message, data.success ? 'success' : 'error');
+                        if (data.success) {
+                            setTimeout(() => location.reload(), 2000);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showNotification('An error occurred while deleting the announcement. Please try again.', 'error');
+                    });
+                }
+            });
+        });
+
         function showNotification(message, type) {
             const container = document.getElementById('notificationContainer');
             const notification = document.createElement('div');
@@ -1716,7 +2015,6 @@ $philippineHolidays = [
             });
         }
 
-        // Interview Tabs
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', function() {
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1759,7 +2057,6 @@ $philippineHolidays = [
                 });
         }
 
-        // Approve/Reject Request
         function approveRequest(id) {
             if (confirm('Are you sure you want to approve this request?')) {
                 fetch('approve_request.php', {
@@ -1815,7 +2112,6 @@ $philippineHolidays = [
                 });
         }
 
-        // Calendar Logic
         const holidays = <?php echo json_encode($philippineHolidays); ?>;
         const events = <?php echo json_encode($monthEvents); ?>;
         let currentDate = new Date();
@@ -1832,14 +2128,12 @@ $philippineHolidays = [
             const calendarDays = document.getElementById('calendarDays');
             calendarDays.innerHTML = '';
 
-            // Previous month days
             for (let i = firstDay; i > 0; i--) {
                 const day = prevLastDate - i + 1;
                 const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 calendarDays.innerHTML += `<div class="calendar-day other-month">${day}</div>`;
             }
 
-            // Current month days
             for (let i = 1; i <= lastDate; i++) {
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
                 let classes = 'calendar-day';
@@ -1866,25 +2160,25 @@ $philippineHolidays = [
                 }
 
                 calendarDays.innerHTML += `
-                    <div class="${classes}" data-date="${dateStr}" data-tooltip="${tooltip}">
+                    <div class="${classes}" data-date="${dateStr}">
                         ${i}
-                        ${dayEvents.length > 0 && !isHoliday ? '<span class="holiday-dot"></span>' : ''}
+                        ${dayEvents.length > 0 && !isHoliday ? '<span class="event-dot"></span>' : ''}
+                        ${tooltip ? `<span class="holiday-tooltip">${tooltip}</span>` : ''}
                     </div>
                 `;
             }
 
-            // Next month days
             const totalDays = firstDay + lastDate;
             const nextDays = totalDays % 7 === 0 ? 0 : 7 - (totalDays % 7);
             for (let i = 1; i <= nextDays; i++) {
                 calendarDays.innerHTML += `<div class="calendar-day other-month">${i}</div>`;
             }
 
-            // Add click event for holidays
-            document.querySelectorAll('.calendar-day.holiday').forEach(day => {
+            document.querySelectorAll('.calendar-day.holiday, .calendar-day.event').forEach(day => {
                 day.addEventListener('click', function() {
                     const date = this.getAttribute('data-date');
                     const holiday = holidays.find(h => h.date === date);
+                    const event = events.find(e => e.event_date === date);
                     if (holiday) {
                         document.getElementById('holidayModalTitle').textContent = holiday.name;
                         document.getElementById('holidayModalDate').textContent = new Date(date).toLocaleDateString('en-US', {
@@ -1892,6 +2186,16 @@ $philippineHolidays = [
                             day: 'numeric',
                             year: 'numeric'
                         });
+                        document.getElementById('holidayModalType').textContent = 'Regular Holiday';
+                        holidayModal.classList.add('active');
+                    } else if (event) {
+                        document.getElementById('holidayModalTitle').textContent = event.title;
+                        document.getElementById('holidayModalDate').textContent = new Date(date).toLocaleDateString('en-US', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric'
+                        });
+                        document.getElementById('holidayModalType').textContent = 'Event';
                         holidayModal.classList.add('active');
                     }
                 });
@@ -1908,28 +2212,48 @@ $philippineHolidays = [
             renderCalendar();
         });
 
-        // Payroll and Working Days Calculation
-        function updatePayrollCard() {
+        function updatePayrollStats() {
             const now = new Date();
-            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-            const daysInMonth = lastDayOfMonth.getDate();
-            const currentDay = now.getDate();
-            const remainingDays = daysInMonth - currentDay;
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const lastDay = new Date(year, month + 1, 0).getDate();
+            const today = now.getDate();
+            const daysUntilPayroll = lastDay - today;
+            
+            document.getElementById('payroll-days').textContent = daysUntilPayroll;
+            document.getElementById('payroll-remaining').textContent = 
+                daysUntilPayroll <= 0 ? 'Payroll processing today' : `${daysUntilPayroll} days until payroll`;
+        }
 
-            document.getElementById('payroll-days').textContent = `${currentDay}/${daysInMonth}`;
-            document.getElementById('payroll-remaining').textContent = `${remainingDays} days until payroll`;
+        function updateWorkingDays() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const lastDay = new Date(year, month + 1, 0).getDate();
+            let workingDays = 0;
+            let holidayCount = 0;
 
-            const monthHolidays = holidays.filter(h => {
-                const hDate = new Date(h.date);
-                return hDate.getMonth() === now.getMonth() && hDate.getFullYear() === now.getFullYear();
-            });
-            const workingDays = daysInMonth - monthHolidays.length;
-            document.getElementById('working-days').textContent = `${workingDays} days`;
-            document.getElementById('holiday-count').textContent = `${monthHolidays.length} holidays`;
+            for (let i = 1; i <= lastDay; i++) {
+                const date = new Date(year, month, i);
+                const dateStr = date.toISOString().split('T')[0];
+                const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                const isHoliday = holidays.some(h => h.date === dateStr);
+
+                if (!isWeekend && !isHoliday) {
+                    workingDays++;
+                }
+                if (isHoliday) {
+                    holidayCount++;
+                }
+            }
+
+            document.getElementById('working-days').textContent = workingDays;
+            document.getElementById('holiday-count').textContent = `${holidayCount} holidays this month`;
         }
 
         renderCalendar();
-        updatePayrollCard();
+        updatePayrollStats();
+        updateWorkingDays();
     </script>
 </body>
 </html>

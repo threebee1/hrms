@@ -665,15 +665,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             border-top: 1px solid var(--gray);
         }
 
+        /* Password Field Styles */
+    
         .password-field {
             position: relative;
             width: 100%;
             max-width: 500px;
-            margin: 0 auto 16px;
+            margin: 16px auto; /* Consistent margin */
+            min-height: 70px; /* Ensure consistent height for all password fields */
+        }
+
+        .password-field .form-label {
+            font-size: 14px;
+            color: var(--text);
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: block; /* Ensure label doesn't affect input positioning */
         }
 
         .password-field .form-control {
-            padding: 12px 40px 12px 12px;
+            padding: 12px 40px 12px 12px; /* Consistent padding for all password fields */
             border: 2px solid var(--gray);
             border-radius: var(--border-radius);
             background: var(--white);
@@ -681,6 +692,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             transition: var(--transition);
             font-size: 14px;
             width: 100%;
+            height: 44px; /* Fixed height to align inputs */
+            box-sizing: border-box;
         }
 
         .password-field .form-control:focus {
@@ -691,9 +704,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .password-toggle {
             position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
+            right: 12px; /* Consistent right positioning */
+            top: calc(50% + 12px); /* Adjust for label height */
+            transform: translateY(-50%); /* Center vertically relative to input */
             background: none;
             border: none;
             color: var(--text-light);
@@ -701,6 +714,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             font-size: 16px;
             padding: 8px;
             transition: var(--transition);
+            z-index: 1; /* Ensure toggle is above input */
         }
 
         .password-toggle:hover {
@@ -1040,10 +1054,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 <?php endif; ?>
             </a>
             <a href="employeeView.php" class="menu-item">
-    <i class="fas fa-chart-line"></i>
-    <span class="menu-text">Performance</span>
-</a>
-
+                <i class="fas fa-chart-line"></i>
+                <span class="menu-text">Performance</span>
+            </a>
+            <a href="emergency.php" class="menu-item">
+                <i class="fas fa-bell"></i>
+                <span class="menu-text">Emergency</span>
+            </a>
             <a href="login.html" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>

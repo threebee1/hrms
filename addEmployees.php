@@ -232,7 +232,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #4B3F72;
@@ -246,19 +246,20 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             --text: #2D2A4A;
             --gray: #E5E7EB;
             --border-radius: 10px;
-            --shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
-            --transition: all 0.2s ease-in-out;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --transition: all 0.3s ease;
         }
 
         body {
             display: flex;
             min-height: 100vh;
             background: var(--light);
-            font-family: 'Inter', 'Roboto', sans-serif;
+            font-family: 'Inter', sans-serif;
             color: var(--text);
             line-height: 1.6;
         }
 
+        /* Sidebar Styles */
         .sidebar {
             width: 260px;
             background: linear-gradient(135deg, var(--primary), var(--primary-light));
@@ -280,6 +281,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
         .sidebar-header {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             padding: 20px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
         }
@@ -299,6 +301,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             background: none;
             border: none;
             color: var(--secondary);
+            font-size: 18px;
             cursor: pointer;
             transition: var(--transition);
         }
@@ -328,14 +331,20 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
         .menu-item i {
             margin-right: 12px;
             font-size: 18px;
+            width: 24px;
+            text-align: center;
         }
 
+        /* Enhanced Main Content Styles */
         .main-content {
             flex: 1;
             padding: 32px;
             background: var(--white);
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.03);
+            overflow-y: auto;
         }
 
+        /* Enhanced Section Header Styles */
         .section-header {
             background: linear-gradient(135deg, var(--primary), var(--primary-light));
             color: var(--white);
@@ -344,49 +353,91 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             text-align: center;
             margin-bottom: 32px;
             box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
         }
 
+        .section-header::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at top right, rgba(191, 162, 219, 0.3), transparent);
+            opacity: 0.6;
+        }
+
+        .section-header h2 {
+            margin: 0;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 1;
+            letter-spacing: 0.5px;
+        }
+
+        .section-header h2 i {
+            margin-right: 12px;
+            font-size: 1.2em;
+        }
+
+        /* Enhanced Section Body Styles */
         .section-body {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 24px;
+            width: 100%;
+            margin: 0;
+            padding: 32px;
             background: var(--white);
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
+            position: relative;
+            border: 1px solid rgba(0, 0, 0, 0.05);
         }
 
+        /* Enhanced Alert Styles */
         .alert-success, .alert-error {
-            position: relative;
-            padding: 16px 48px 16px 16px;
+            padding: 16px 20px;
             border-radius: var(--border-radius);
             margin-bottom: 24px;
             display: flex;
             align-items: center;
             animation: fadeIn 0.5s ease-in;
+            font-weight: 500;
         }
 
         .alert-success {
             background: rgba(16, 185, 129, 0.1);
             color: var(--success);
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-left: 4px solid var(--success);
         }
 
         .alert-error {
             background: rgba(239, 68, 68, 0.1);
             color: var(--error);
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-left: 4px solid var(--error);
+        }
+
+        .alert-success i, .alert-error i {
+            font-size: 1.2em;
+            margin-right: 12px;
         }
 
         .alert-dismiss {
-            position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
+            margin-left: auto;
             background: none;
             border: none;
             color: inherit;
-            font-size: 18px;
+            font-size: 16px;
             cursor: pointer;
+            transition: var(--transition);
+            padding: 4px;
+        }
+
+        .alert-dismiss:hover {
+            opacity: 0.7;
+            transform: scale(1.1);
         }
 
         @keyframes fadeIn {
@@ -394,14 +445,22 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Enhanced Form Element Styles */
         .form-control, .form-select {
             padding: 12px 12px 12px 40px;
             border: 1px solid var(--gray);
             border-radius: var(--border-radius);
             background: #F9FAFB;
-            transition: var(--transition);
             font-size: 15px;
             font-weight: 400;
+            transition: var(--transition);
+            height: 52px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        textarea.form-control {
+            height: auto;
+            padding-top: 15px;
         }
 
         .form-control:focus, .form-select:focus {
@@ -412,7 +471,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
 
         .form-control.is-invalid {
             border-color: var(--error);
-            background: rgba(239, 68, 68, 0.05);
+            background: rgba(239, 68opposite, 68, 0.05);
         }
 
         .form-group {
@@ -423,89 +482,159 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
         .form-group i {
             position: absolute;
             left: 12px;
-            top: 50%;
-            transform: translateY(-50%);
+            top: 43px;
             color: var(--text);
             font-size: 16px;
+            width: 24px;
+            text-align: center;
+            opacity: 0.7;
         }
 
         .form-error {
             color: var(--error);
             font-size: 0.85rem;
             margin-top: 6px;
+            font-weight: 500;
         }
 
         .form-label {
             font-weight: 500;
             margin-bottom: 8px;
             color: var(--text);
+            display: block;
+            font-size: 0.95rem;
         }
 
+        .form-label .text-danger {
+            font-weight: 700;
+        }
+
+        /* Enhanced Button Styles */
         .btn-primary {
             background: linear-gradient(135deg, var(--accent), var(--primary-light));
             color: var(--white);
             border: none;
-            padding: 12px 32px;
+            padding: 14px 32px;
             border-radius: var(--border-radius);
-            font-weight: 500;
+            font-weight: 600;
             box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
             transition: var(--transition);
+            letter-spacing: 0.5px;
         }
 
         .btn-primary:hover {
-            background: var(--accent);
+            background: linear-gradient(135deg, var(--primary-light), var(--accent));
             transform: translateY(-2px);
             box-shadow: 0 6px 16px rgba(124, 58, 237, 0.4);
         }
 
-        .accordion-item {
-            border: none;
-            margin-bottom: 16px;
-            border-radius: var(--border-radius);
-            overflow: hidden;
-            box-shadow: var(--shadow);
+        .btn-primary:active {
+            transform: translateY(0);
         }
 
-        .accordion-button {
-            background: var(--primary-light);
-            color: var(--white);
-            font-weight: 500;
-            padding: 16px;
+        .btn-primary i {
+            margin-right: 10px;
+        }
+
+        /* Enhanced Accordion Styles */
+        .accordion-item {
+            border: none;
+            margin-bottom: 20px;
             border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
             transition: var(--transition);
         }
 
-        .accordion-button:not(.collapsed) {
-            background: var(--primary);
+        .accordion-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .accordion-button {
+            background: linear-gradient(135deg, var(--primary-light), var(--primary));
             color: var(--white);
+            font-weight: 600;
+            padding: 18px 20px;
+            border-radius: var(--border-radius) var(--border-radius) 0 0;
+            transition: var(--transition);
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .accordion-button::after {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+        }
+
+        .accordion-button:not(.collapsed) {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: var(--white);
+            box-shadow: none;
+        }
+
+        .accordion-button:not(.collapsed)::after {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+            transform: rotate(-180deg);
         }
 
         .accordion-button:focus {
             box-shadow: none;
+            border-color: transparent;
+        }
+
+        .accordion-button i {
+            margin-right: 12px;
+            font-size: 1.1em;
         }
 
         .accordion-body {
             background: var(--white);
-            padding: 24px;
+            padding: 24px 28px;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-top: none;
+            border-radius: 0 0 var(--border-radius) var(--border-radius);
         }
 
+        .row {
+            margin-left: -12px;
+            margin-right: -12px;
+        }
+
+        .col-md-6 {
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+
+        /* Enhanced Photo Upload Styles */
         .photo-upload {
             position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .photo-preview {
-            width: 120px;
-            height: 120px;
+            width: 140px;
+            height: 140px;
             border-radius: 50%;
-            background: var(--gray);
+            background: #F9FAFB;
             overflow: hidden;
             border: 4px solid var(--secondary);
+            margin-bottom: 20px;
+            position: relative;
+            transition: var(--transition);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 12px;
-            position: relative;
-            transition: var(--transition);
+        }
+
+        .photo-preview::before {
+            content: '\f030';
+            font-family: 'Font Awesome 5 Free';
+            font-weight: 900;
+            font-size: 2em;
+            color: rgba(0, 0, 0, 0.2);
         }
 
         .photo-preview img {
@@ -514,31 +643,42 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             object-fit: cover;
         }
 
+        .photo-preview:hover {
+            border-color: var(--accent);
+            transform: scale(1.02);
+        }
+
         .photo-preview:hover::after {
             content: '\f030';
             font-family: 'Font Awesome 5 Free';
             font-weight: 900;
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             color: var(--white);
             font-size: 24px;
-            background: rgba(0, 0, 0, 0.5);
-            width: 100%;
-            height: 100%;
+            background: rgba(107, 92, 165, 0.7);
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 50%;
+        }
+
+        /* Enhanced Toggle Switch Styles */
+        .toggle-switch-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
         }
 
         .toggle-switch {
             position: relative;
             display: inline-block;
-            width: 64px;
-            height: 34px;
+            width: 60px;
+            height: 30px;
             margin-left: 16px;
+            vertical-align: middle;
         }
 
         .toggle-switch input {
@@ -556,19 +696,21 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             bottom: 0;
             background: var(--gray);
             transition: var(--transition);
-            border-radius: 34px;
+            border-radius: 30px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .toggle-slider:before {
             position: absolute;
             content: "";
-            height: 26px;
-            width: 26px;
+            height: 22px;
+            width: 22px;
             left: 4px;
             bottom: 4px;
             background: var(--white);
             transition: var(--transition);
             border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
         }
 
         input:checked + .toggle-slider {
@@ -579,9 +721,23 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             transform: translateX(30px);
         }
 
+        .toggle-label {
+            font-weight: 600;
+            color: var(--text);
+            margin-right: 8px;
+        }
+
+        /* Enhanced Username Suggestions Styles */
+        .username-suggestions {
+            margin-top: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
         .username-suggestions .suggestion {
-            display: inline-block;
-            margin: 6px 6px 0 0;
+            display: inline-flex;
+            align-items: center;
             padding: 8px 16px;
             background: var(--secondary);
             color: var(--white);
@@ -590,37 +746,92 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             font-size: 0.85rem;
             font-weight: 500;
             transition: var(--transition);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .username-suggestions .suggestion:hover {
             background: var(--accent);
-            transform: scale(1.05);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
         }
 
         .username-suggestions .suggestion.available {
             background: var(--success);
         }
 
+        .username-suggestions .suggestion.available::before {
+            content: '\f00c';
+            font-family: 'Font Awesome 5 Free';
+            font-weight: 900;
+            margin-right: 6px;
+            font-size: 0.8em;
+        }
+
+        /* Enhanced Footer Info Styles */
         .info-footer {
             background: var(--white);
             border-radius: var(--border-radius);
-            padding: 24px;
+            padding: 24px 28px;
             margin-top: 32px;
             cursor: pointer;
             transition: var(--transition);
             box-shadow: var(--shadow);
+            width: 100%;
+            margin-left: 0;
+            margin-right: 0;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            position: relative;
         }
 
         .info-footer h5 {
             margin: 0;
             font-weight: 600;
+            display: flex;
+            align-items: center;
+            color: var(--primary);
+        }
+
+        .info-footer h5 i {
+            color: var(--accent);
+            margin-right: 12px;
+            font-size: 1.2em;
+        }
+
+        .info-footer:after {
+            content: '\f078';
+            font-family: 'Font Awesome 5 Free';
+            font-weight: 900;
+            position: absolute;
+            right: 24px;
+            top: 24px;
+            color: var(--primary);
+            transition: var(--transition);
+        }
+
+        .info-footer.active:after {
+            transform: rotate(180deg);
         }
 
         .info-footer .info-content {
             display: none;
-            margin-top: 16px;
-            padding-top: 16px;
+            margin-top: 20px;
+            padding-top: 20px;
             border-top: 1px solid var(--gray);
+            color: var(--text);
+        }
+
+        .info-footer .info-content p {
+            margin-bottom: 16px;
+            line-height: 1.6;
+        }
+
+        .info-footer .info-content ul {
+            padding-left: 24px;
+        }
+
+        .info-footer .info-content li {
+            margin-bottom: 8px;
+            position: relative;
         }
 
         .info-footer.active .info-content {
@@ -630,12 +841,23 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
 
         .info-footer:hover {
             background: var(--light);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
         }
 
         @keyframes slideDown {
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Enhanced Responsive Styles */
+        @media (max-width: 992px) {
+            .main-content {
+                padding: 24px;
+            }
+            
+            .section-body {
+                padding: 24px;
+            }
         }
 
         @media (max-width: 768px) {
@@ -648,20 +870,42 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                 transform: translateX(-100%);
             }
             .main-content {
+                padding: 20px;
+            }
+            .section-body {
+                padding: 20px;
+            }
+            .form-control, .form-select {
+                font-size: 14px;
+                height: 48px;
+            }
+            .photo-preview {
+                width: 120px;
+                height: 120px;
+            }
+            .username-suggestions {
+                flex-direction: column;
+            }
+            .username-suggestions .suggestion {
+                margin-bottom: 8px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .main-content {
                 padding: 16px;
             }
             .section-body {
                 padding: 16px;
             }
-            .form-control, .form-select {
-                font-size: 14px;
+            .accordion-button {
+                padding: 16px;
+            }
+            .accordion-body {
+                padding: 16px;
             }
             .btn-primary {
-                padding: 10px 24px;
-            }
-            .photo-preview {
-                width: 100px;
-                height: 100px;
+                width: 100%;
             }
         }
     </style>
@@ -709,7 +953,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                     <div class="accordion-item">
                         <h2 class="accordion-header" id="personalHeading">
                             <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#personalCollapse" aria-expanded="true" aria-controls="personalCollapse">
-                                <i class="fas fa-user me-2"></i>Personal Information
+                                <i class="fas fa-user"></i>Personal Information
                             </button>
                         </h2>
                         <div id="personalCollapse" class="accordion-collapse collapse show" aria-labelledby="personalHeading">
@@ -759,7 +1003,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                                         <div class="form-group">
                                             <label for="address">Address</label>
                                             <i class="fas fa-map-marker-alt"></i>
-                                            <textarea id="address" name="address" class="form-control"><?php echo htmlspecialchars($form_data['address'] ?? ''); ?></textarea>
+                                            <textarea id="address" name="address" class="form-control" style="height: 100px;"><?php echo htmlspecialchars($form_data['address'] ?? ''); ?></textarea>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
@@ -783,7 +1027,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                     <div class="accordion-item">
                         <h2 class="accordion-header" id="jobHeading">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#jobCollapse" aria-expanded="false" aria-controls="jobCollapse">
-                                <i class="fas fa-briefcase me-2"></i>Job Details
+                                <i class="fas fa-briefcase"></i>Job Details
                             </button>
                         </h2>
                         <div id="jobCollapse" class="accordion-collapse collapse" aria-labelledby="jobHeading">
@@ -820,13 +1064,13 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                     <div class="accordion-item">
                         <h2 class="accordion-header" id="accountHeading">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#accountCollapse" aria-expanded="false" aria-controls="accountCollapse">
-                                <i class="fas fa-user-lock me-2"></i>Account Setup
+                                <i class="fas fa-user-lock"></i>Account Setup
                             </button>
                         </h2>
                         <div id="accountCollapse" class="accordion-collapse collapse" aria-labelledby="accountHeading">
                             <div class="accordion-body">
                                 <div class="form-group mb-4">
-                                    <label style="display: inline-block;">
+                                    <label style="display: inline-block; font-weight: 500;">
                                         Create System Account
                                         <label class="toggle-switch">
                                             <input type="checkbox" id="create_account_toggle" name="create_account" <?php echo $create_account ? 'checked' : ''; ?>>
@@ -935,7 +1179,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                 accountInputs.forEach(input => {
                     input.required = isChecked;
                     if (!isChecked) {
-                        input.value = ''; // Clear values when toggled off
+                        input.value = '';
                         input.classList.remove('is-invalid');
                         const errorDiv = document.getElementById(input.id + 'Error');
                         if (errorDiv) errorDiv.textContent = '';
@@ -944,7 +1188,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
             }
 
             createAccountToggle.addEventListener('change', toggleAccountFields);
-            toggleAccountFields(); // Initialize state
+            toggleAccountFields();
 
             // Form Submission Validation
             form.addEventListener('submit', (e) => {
@@ -1060,7 +1304,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                 hireDate.classList.add('is-invalid');
             } else {
                 hireDateError.textContent = '';
-                hireDate.classList.remove('is-invalid');
+                hireDateError.classList.remove('is-invalid');
             }
 
             // Username
@@ -1126,7 +1370,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
 
             async function checkUsernameAvailability(username) {
                 if (abortController) {
-                    abortController.abort(); // Cancel previous request
+                    abortController.abort();
                 }
                 abortController = new AbortController();
                 try {
@@ -1137,7 +1381,7 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
                     return data.available;
                 } catch (error) {
                     if (error.name === 'AbortError') {
-                        return false; // Request was aborted
+                        return false;
                     }
                     console.error('Error checking username:', error);
                     return false;
@@ -1237,4 +1481,4 @@ if (!empty($form_data['first_name']) && !empty($form_data['last_name'])) {
         });
     </script>
 </body>
-</html>     
+</html>

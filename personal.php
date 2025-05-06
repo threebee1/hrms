@@ -55,7 +55,7 @@ try {
 
 if (!$user) {
     session_destroy();
-    header('Location: login.php?error=user_not_found');
+    header('Location: login.html?error=user_not_found');
     exit();
 }
 
@@ -199,7 +199,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             line-height: 1.6;
         }
 
-        /* Sidebar Styles */
         .sidebar {
             width: 260px;
             background: var(--gradient);
@@ -293,7 +292,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             font-size: 18px;
         }
 
-        /* Main Content Styles */
         .main-content {
             flex: 1;
             overflow-y: auto;
@@ -301,7 +299,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             background-color: var(--white);
         }
 
-        /* Header Styles */
         .header {
             display: flex;
             justify-content: space-between;
@@ -357,7 +354,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             box-shadow: var(--shadow);
         }
 
-        /* Content Styles */
         .content {
             max-width: 1200px;
             margin: 40px auto;
@@ -562,16 +558,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .password-section {
             grid-column: span 2;
             margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid var(--gray);
+            padding: 20px;
+            background: var(--light);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--gray);
         }
 
         .password-field {
             position: relative;
+            margin-bottom: 16px;
+            max-width: 500px;
         }
 
         .password-field .form-control {
-            padding-right: 40px; /* Space for the eye icon */
+            padding-right: 48px;
             border: 2px solid var(--gray);
             background: var(--white);
             box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -600,6 +600,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .password-toggle:hover {
             color: var(--primary);
+            background: rgba(191, 162, 219, 0.1);
+            border-radius: 50%;
         }
 
         .password-toggle i {
@@ -610,14 +612,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             font-size: 12px;
             color: var(--text-light);
             margin-top: 5px;
+            max-width: 500px;
         }
 
-        /* Checkbox Styling */
-        .password-section .form-group {
+        .password-section .form-group.checkbox-group {
             display: flex;
             flex-direction: row;
             align-items: center;
             gap: 10px;
+            margin-bottom: 20px;
         }
 
         .password-section input[type="checkbox"] {
@@ -634,7 +637,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             cursor: pointer;
         }
 
-        /* Flatpickr Custom Styles */
         .flatpickr-calendar {
             background: var(--white);
             border: 1px solid var(--gray);
@@ -725,7 +727,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             display: block;
         }
 
-        /* Notification Styles */
         .update-notification {
             position: fixed;
             bottom: 30px;
@@ -778,7 +779,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             transform: scale(1.1);
         }
 
-        /* Responsive Styles */
         @media (max-width: 1400px) {
             .profile-info-container {
                 grid-template-columns: 1fr;
@@ -801,6 +801,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             }
             .personal-section {
                 padding: 20px;
+            }
+            .password-field {
+                max-width: 100%;
             }
         }
 
@@ -834,6 +837,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 align-items: flex-start;
                 gap: 10px;
             }
+            .password-section {
+                padding: 15px;
+            }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -845,7 +851,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
     </style>
 </head>
 <body>
-    <!-- Sidebar -->
     <aside class="sidebar">
         <div class="sidebar-header">
             <div class="logo">
@@ -900,9 +905,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         </nav>
     </aside>
 
-    <!-- Main Content -->
     <main class="main-content">
-        <!-- Header -->
         <header class="header">
             <div class="header-title">
                 <h1>Personal Information</h1>
@@ -927,14 +930,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             </div>
         </header>
 
-        <!-- Content -->
         <div class="content">
             <section class="personal-section" role="region" aria-labelledby="personal-info-title">
                 <div class="section-header">
                     <h2 class="section-title" id="personal-info-title">Personal Information</h2>
                 </div>
 
-                <!-- Notifications -->
                 <?php if ($success_message): ?>
                     <div class="alert-success" role="alert">
                         <i class="fas fa-check-circle"></i>
@@ -948,7 +949,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                     </div>
                 <?php endif; ?>
 
-                <!-- Profile Information -->
                 <div class="profile-info-container">
                     <div class="profile-card">
                         <h5><i class="fas fa-id-card me-2"></i>Account Details</h5>
@@ -963,7 +963,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                     </div>
                 </div>
 
-                <!-- Edit Form -->
                 <form id="personalForm" method="POST" novalidate>
                     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
                     <div class="form-grid">
@@ -993,35 +992,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                             <textarea class="form-control" id="address" name="address" rows="4" required aria-required="true"><?php echo htmlspecialchars($user['address']); ?></textarea>
                         </div>
                         <div class="password-section">
-                            <div class="form-group">
+                            <div class="form-group checkbox-group">
                                 <input type="checkbox" id="changePassword" aria-controls="passwordFields">
                                 <label for="changePassword" class="form-label">Change Password</label>
                             </div>
                             <div id="passwordFields" style="display: none;">
-                                <div class="form-grid">
-                                    <div class="form-group password-field">
-                                        <label for="old_password" class="form-label">Current Password</label>
-                                        <input type="password" class="form-control" id="old_password" name="old_password" aria-describedby="old_password_help">
-                                        <button type="button" class="password-toggle" onclick="togglePassword('old_password', this)" aria-label="Toggle current password visibility">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                    </div>
-                                    <div class="form-group"></div>
-                                    <div class="form-group password-field">
-                                        <label for="password" class="form-label">New Password</label>
-                                        <input type="password" class="form-control" id="password" name="password" aria-describedby="password_help">
-                                        <button type="button" class="password-toggle" onclick="togglePassword('password', this)" aria-label="Toggle new password visibility">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        <div class="form-text" id="password_help">Password must be at least 8 characters long and include letters and numbers.</div>
-                                    </div>
-                                    <div class="form-group password-field">
-                                        <label for="confirm_password" class="form-label">Confirm New Password</label>
-                                        <input type="password" class="form-control" id="confirm_password" name="confirm_password">
-                                        <button type="button" class="password-toggle" onclick="togglePassword('confirm_password', this)" aria-label="Toggle confirm password visibility">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                    </div>
+                                <div class="form-group password-field">
+                                    <label for="old_password" class="form-label">Current Password</label>
+                                    <input type="password" class="form-control" id="old_password" name="old_password" aria-describedby="old_password_help">
+                                    <button type="button" class="password-toggle" onclick="togglePassword('old_password', this)" aria-label="Toggle current password visibility" aria-expanded="false">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                                <div class="form-group password-field">
+                                    <label for="password" class="form-label">New Password</label>
+                                    <input type="password" class="form-control" id="password" name="password" aria-describedby="password_help">
+                                    <button type="button" class="password-toggle" onclick="togglePassword('password', this)" aria-label="Toggle new password visibility" aria-expanded="false">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <div class="form-text" id="password_help">Password must be at least 8 characters long and include letters and numbers.</div>
+                                </div>
+                                <div class="form-group password-field">
+                                    <label for="confirm_password" class="form-label">Confirm New Password</label>
+                                    <input type="password" class="form-control" id="confirm_password" name="confirm_password">
+                                    <button type="button" class="password-toggle" onclick="togglePassword('confirm_password', this)" aria-label="Toggle confirm password visibility" aria-expanded="false">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1036,18 +1032,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         </div>
     </main>
 
-    <!-- Notification Container -->
     <div id="notificationContainer"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script>
-        // Sidebar Toggle
         document.getElementById('sidebarToggle').addEventListener('click', function() {
             document.querySelector('.sidebar').classList.toggle('collapsed');
         });
 
-        // Current Time Update
         function updateTime() {
             const timeElement = document.getElementById('currentTime');
             const now = new Date();
@@ -1064,22 +1057,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         setInterval(updateTime, 1000);
         updateTime();
 
-        // Password Toggle
         function togglePassword(fieldId, button) {
             const field = document.getElementById(fieldId);
             const icon = button.querySelector('i');
-            if (field.type === 'password') {
-                field.type = 'text';
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
-            } else {
-                field.type = 'password';
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            }
+            const isVisible = field.type === 'password';
+            field.type = isVisible ? 'text' : 'password';
+            icon.classList.toggle('fa-eye', isVisible);
+            icon.classList.toggle('fa-eye-slash', !isVisible);
+            button.setAttribute('aria-expanded', isVisible);
         }
 
-        // Change Password Checkbox
         const changePasswordCheckbox = document.getElementById('changePassword');
         const passwordFields = document.getElementById('passwordFields');
         changePasswordCheckbox.addEventListener('change', function() {
@@ -1091,7 +1078,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             }
         });
 
-        // Flatpickr for Birthdate
         flatpickr('#birthdate', {
             dateFormat: 'Y/m/d',
             maxDate: 'today',
@@ -1104,7 +1090,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             }
         });
 
-        // Client-Side Validation
         const form = document.getElementById('personalForm');
         const fields = {
             first_name: { regex: /.+/, message: 'First name is required.' },
@@ -1127,13 +1112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             }
         }
 
-        // Real-time validation
         Object.keys(fields).forEach(fieldId => {
             const input = document.getElementById(fieldId);
             input.addEventListener('input', () => validateField(fieldId, input.value));
         });
 
-        // Age Validation
         function validateAge(dateStr) {
             const ageValidation = document.getElementById('ageValidation');
             if (!/^\d{4}\/\d{2}\/\d{2}$/.test(dateStr)) {
@@ -1163,7 +1146,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             }
         }
 
-        // Form Submission Validation
         form.addEventListener('submit', function(e) {
             let valid = true;
             Object.keys(fields).forEach(fieldId => {
@@ -1216,7 +1198,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             }
         });
 
-        // Auto-dismiss Notifications
         document.querySelectorAll('.alert-success, .alert-error').forEach(alert => {
             setTimeout(() => {
                 alert.style.opacity = '0';

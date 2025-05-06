@@ -23,7 +23,7 @@ try {
 }
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: login.html');
     exit();
 }
 
@@ -147,9 +147,9 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             --success: #4BB543;
             --text: #2D2A4A;
             --gray: #E5E5E5;
-            --border-radius: 12px;
-            --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
+            --border-radius: 8px;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --transition: all 0.2s ease;
         }
 
         body {
@@ -158,7 +158,7 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             background: var(--light);
             font-family: 'Outfit', sans-serif;
             color: var(--text);
-            line-height: 1.5;
+            line-height: 1.6;
         }
 
         .sidebar {
@@ -182,18 +182,19 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .sidebar-header {
             display: flex;
             justify-content: space-between;
-            padding: 20px;
+            align-items: center;
+            padding: 16px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .logo-icon {
-            font-size: 24px;
+            font-size: 22px;
             color: var(--secondary);
-            margin-right: 10px;
+            margin-right: 8px;
         }
 
         .logo-text {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 600;
         }
 
@@ -201,6 +202,7 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             background: none;
             border: none;
             color: var(--secondary);
+            font-size: 16px;
             cursor: pointer;
             transition: var(--transition);
         }
@@ -212,7 +214,7 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .menu-item {
             display: flex;
             align-items: center;
-            padding: 12px 20px;
+            padding: 10px 16px;
             color: var(--white);
             text-decoration: none;
             transition: var(--transition);
@@ -228,23 +230,23 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         .menu-item i {
-            margin-right: 12px;
-            font-size: 18px;
+            margin-right: 10px;
+            font-size: 16px;
         }
 
         .main-content {
             flex: 1;
-            padding: 40px;
+            padding: 32px;
             background: var(--white);
         }
 
         .section-header {
             background: linear-gradient(135deg, var(--primary), var(--primary-light));
             color: var(--white);
-            padding: 20px;
+            padding: 16px;
             border-radius: var(--border-radius);
             text-align: center;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
 
         .section-body {
@@ -255,95 +257,122 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         .alert-success, .alert-error {
-            padding: 15px;
+            padding: 12px;
             border-radius: var(--border-radius);
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
             animation: fadeIn 0.5s ease-in;
         }
 
         .alert-success {
-            background: rgba(75, 181, 67, 0.15);
+            background: rgba(75, 181, 67, 0.1);
             color: var(--success);
-            border: 1px solid rgba(75, 181, 67, 0.3);
+            border: 1px solid rgba(75, 181, 67, 0.2);
         }
 
         .alert-error {
-            background: rgba(255, 107, 107, 0.15);
+            background: rgba(255, 107, 107, 0.1);
             color: var(--error);
-            border: 1px solid rgba(255, 107, 107, 0.3);
+            border: 1px solid rgba(255, 107, 107, 0.2);
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
+            from { opacity: 0; transform: translateY(-8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         .form-control {
-            padding: 12px;
-            border: 2px solid var(--gray);
+            padding: 10px;
+            border: 1px solid var(--gray);
             border-radius: var(--border-radius);
             transition: var(--transition);
+            font-size: 14px;
         }
 
         .form-control:focus {
             border-color: var(--secondary);
-            box-shadow: 0 0 0 3px rgba(191, 162, 219, 0.3);
+            box-shadow: 0 0 0 2px rgba(191, 162, 219, 0.2);
         }
 
         .form-control.is-invalid {
             border-color: var(--error);
-            background-image: none;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: var(--border-radius);
+            font-size: 14px;
+            font-weight: 500;
+            transition: var(--transition);
+            min-width: 120px;
+            text-align: center;
         }
 
         .btn-primary {
             background: linear-gradient(135deg, var(--primary), var(--primary-light));
             color: var(--white);
             border: none;
-            padding: 12px 24px;
-            border-radius: var(--border-radius);
-            transition: var(--transition);
         }
 
         .btn-primary:hover {
             background: var(--primary-light);
+            transform: translateY(-1px);
         }
 
         .btn-warning {
             background: linear-gradient(135deg, #ffc107, #ffca2c);
             color: #000;
+            border: none;
+        }
+
+        .btn-warning:hover {
+            background: #ffca2c;
+            transform: translateY(-1px);
         }
 
         .btn-danger {
             background: linear-gradient(135deg, var(--error), #ff8787);
             color: var(--white);
+            border: none;
+        }
+
+        .btn-danger:hover {
+            background: #ff8787;
+            transform: translateY(-1px);
         }
 
         .btn-toggle {
-            background: none;
-            border: 2px solid var(--primary);
+            background: var(--white);
+            border: 1px solid var(--primary);
             color: var(--primary);
-            padding: 8px 16px;
-            border-radius: var(--border-radius);
-            transition: var(--transition);
+            min-width: 140px;
         }
 
         .btn-toggle.active, .btn-toggle:hover {
             background: var(--primary);
             color: var(--white);
+            transform: translateY(-1px);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+            min-width: 80px;
         }
 
         .table {
             background: var(--white);
             border-radius: var(--border-radius);
             overflow: hidden;
+            margin-bottom: 0;
         }
 
         .table thead th {
             background: var(--primary);
             color: var(--white);
-            padding: 14px;
+            padding: 12px;
+            font-size: 14px;
         }
 
         .table tbody tr:nth-child(odd) {
@@ -351,13 +380,14 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         .table tbody tr:hover {
-            background: rgba(191, 162, 219, 0.1);
+            background: rgba(191, 162, 219, 0.05);
         }
 
         .badge {
-            padding: 6px 12px;
+            padding: 6px 10px;
             border-radius: var(--border-radius);
             color: #fff;
+            font-size: 12px;
         }
 
         .relationship-badge {
@@ -366,6 +396,7 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         .modal-header {
             border-radius: var(--border-radius) var(--border-radius) 0 0;
+            padding: 12px 16px;
         }
 
         .modal-header.bg-primary {
@@ -375,19 +406,25 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         .modal-header.bg-danger {
             background: linear-gradient(135deg, var(--error), #ff8787);
+            color: var(--white);
+        }
+
+        .modal-footer {
+            padding: 12px 16px;
         }
 
         .info-footer {
             background: var(--light);
             border-radius: var(--border-radius);
-            padding: 20px;
-            margin-top: 24px;
+            padding: 16px;
+            margin-top: 20px;
             cursor: pointer;
             transition: var(--transition);
         }
 
         .info-footer .info-content {
             display: none;
+            margin-top: 12px;
         }
 
         .info-footer.active .info-content {
@@ -409,10 +446,19 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 transform: translateX(-100%);
             }
             .main-content {
-                padding: 20px;
+                padding: 16px;
             }
             .section-body {
-                padding: 15px;
+                padding: 12px;
+            }
+            .btn {
+                min-width: 100px;
+            }
+            .btn-toggle {
+                min-width: 120px;
+            }
+            .btn-sm {
+                min-width: 60px;
             }
         }
     </style>
@@ -453,8 +499,8 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <?php endif; ?>
 
         <div class="section-body">
-            <div class="d-flex justify-content-start mb-4">
-                <button class="btn btn-toggle me-2 active" id="addContactTab" role="tab" aria-selected="true">Add Contact</button>
+            <div class="d-flex justify-content-start mb-4 gap-2">
+                <button class="btn btn-toggle active" id="addContactTab" role="tab" aria-selected="true">Add Contact</button>
                 <button class="btn btn-toggle" id="viewContactsTab" role="tab" aria-selected="false">View Contacts</button>
             </div>
 
@@ -476,7 +522,7 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <input type="text" class="form-control" id="phone" name="phone" required aria-required="true" pattern="\+?\d{10,15}" title="Phone number must be 10-15 digits, optionally starting with '+'.">
                         </div>
                     </div>
-                    <div class="text-end mt-3">
+                    <div class="text-end mt-4">
                         <button type="submit" name="add_contact" class="btn btn-primary"><i class="fas fa-save me-2"></i>Add Contact</button>
                     </div>
                 </form>
@@ -580,7 +626,6 @@ $contacts = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
 
-        <!-- Information Footer -->
         <div class="info-footer">
             <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Important Information</h5>
             <div class="info-content">

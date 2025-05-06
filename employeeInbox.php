@@ -306,6 +306,10 @@ $current_user = getUserDetails($conn, $current_user_id);
             transform: translateY(-1px);
         }
 
+        .navbar-nav {
+            flex-grow: 1;
+        }
+
         .nav-link {
             color: rgba(255, 255, 255, 0.9);
             font-weight: 400;
@@ -384,12 +388,12 @@ $current_user = getUserDetails($conn, $current_user_id);
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             transition: var(--transition);
             background: var(--white);
-            transform: perspective(500px) translateZ(0);
+            transform: scale(1);
         }
 
         .contact-item:hover, .contact-item.active {
             background: var(--light);
-            transform: perspective(500px) translateZ(5px);
+            transform: scale(1.02);
             box-shadow: var(--shadow-hover);
         }
 
@@ -414,7 +418,7 @@ $current_user = getUserDetails($conn, $current_user_id);
         }
 
         .profile-pic:hover {
-            transform: scale(1.1) translateZ(10px);
+            transform: scale(1.1);
         }
 
         /* Message Area */
@@ -460,11 +464,11 @@ $current_user = getUserDetails($conn, $current_user_id);
             word-wrap: break-word;
             box-shadow: var(--shadow);
             transition: var(--transition);
-            transform: perspective(500px) translateZ(0);
+            transform: scale(1);
         }
 
         .message-bubble:hover {
-            transform: perspective(500px) translateZ(5px);
+            transform: scale(1.03);
             box-shadow: var(--shadow-hover);
         }
 
@@ -541,7 +545,7 @@ $current_user = getUserDetails($conn, $current_user_id);
 
         .btn-primary:hover {
             background: linear-gradient(135deg, var(--primary-light), var(--primary));
-            transform: perspective(500px) translateZ(5px);
+            transform: scale(1.05);
             box-shadow: var(--shadow-hover);
         }
 
@@ -558,7 +562,7 @@ $current_user = getUserDetails($conn, $current_user_id);
         .btn-outline-secondary:hover {
             background: var(--light);
             border-color: var(--primary);
-            transform: perspective(500px) translateZ(5px);
+            transform: scale(1.05);
         }
 
         /* Date Divider */
@@ -607,11 +611,11 @@ $current_user = getUserDetails($conn, $current_user_id);
             box-shadow: var(--shadow);
             max-width: 350px;
             transition: var(--transition);
-            transform: perspective(500px) translateZ(0);
+            transform: scale(1);
         }
 
         .help-box:hover {
-            transform: perspective(500px) translateZ(5px);
+            transform: scale(1.03);
             box-shadow: var(--shadow-hover);
         }
 
@@ -621,7 +625,7 @@ $current_user = getUserDetails($conn, $current_user_id);
             border: none;
             background: var(--white);
             box-shadow: var(--shadow);
-            transform: perspective(500px) translateZ(0);
+            transform: scale(1);
         }
 
         .modal-header {
@@ -640,8 +644,8 @@ $current_user = getUserDetails($conn, $current_user_id);
 
         /* Animations */
         @keyframes popIn {
-            0% { opacity: 0; transform: perspective(500px) translateZ(-10px) scale(0.95); }
-            100% { opacity: 1; transform: perspective(500px) translateZ(0) scale(1); }
+            0% { opacity: 0; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
         }
 
         .message-bubble, .contact-item, .empty-state, .help-box, .modal-content {
@@ -699,6 +703,16 @@ $current_user = getUserDetails($conn, $current_user_id);
                 background: var(--white);
                 border: 1px solid var(--gray);
                 box-shadow: var(--shadow);
+            }
+
+            .navbar-nav {
+                justify-content: center;
+                text-align: center;
+                width: 100%;
+            }
+
+            .nav-item {
+                margin: 0.2rem 0;
             }
         }
 
@@ -786,7 +800,7 @@ $current_user = getUserDetails($conn, $current_user_id);
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
+                <ul class="navbar-nav">
                     <li class="nav-item">
                         <a class="nav-link" href="employeedashboard.php">Dashboard</a>
                     </li>
@@ -815,7 +829,7 @@ $current_user = getUserDetails($conn, $current_user_id);
                         </a>
                     </li>
                 </ul>
-                <div class="d-flex align-items-center">
+                <div class="d-flex align-items-center ms-auto">
                     <div class="text-white me-3">
                         <?php echo htmlspecialchars($current_user['first_name'] . ' ' . $current_user['last_name']); ?>
                         <small class="text-white-50 d-block"><?php echo htmlspecialchars($current_user['department']); ?></small>

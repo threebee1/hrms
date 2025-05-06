@@ -26,7 +26,7 @@ try {
 
 // Check if the user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.html');
+    header('Location: login.php');
     exit();
 }
 
@@ -53,12 +53,58 @@ try {
 $currentUser = $userStmt->fetch(PDO::FETCH_ASSOC);
 if (!$currentUser) {
     session_destroy();
-    header('Location: login.html');
+    header('Location: login.php');
+    exit();
+}
+
+// Delete expired announcements (older than announcement_date)
+try {
+    $deleteStmt = $pdo->prepare("
+        DELETE FROM announcements 
+        WHERE announcement_date < CURDATE()
+    ");
+    $deleteStmt->execute();
+} catch (PDOException $e) {
+    error_log("Failed to delete expired announcements: " . $e->getMessage());
+}
+
+// Handle announcement deletion (via AJAX)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_announcement']) && ($currentUser['role'] === 'admin' || $currentUser['role'] === 'hr')) {
+    header('Content-Type: application/json');
+    
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
+        exit();
+    }
+
+    $announcement_id = filter_var($_POST['announcement_id'] ?? '', FILTER_SANITIZE_NUMBER_INT);
+
+    if (empty($announcement_id)) {
+        echo json_encode(['success' => false, 'message' => 'Announcement ID is required.']);
+        exit();
+    }
+
+    try {
+        $deleteStmt = $pdo->prepare("
+            DELETE FROM announcements 
+            WHERE id = ?
+        ");
+        $success = $deleteStmt->execute([$announcement_id]);
+        
+        if ($success) {
+            echo json_encode(['success' => true, 'message' => 'Announcement deleted successfully!']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to delete announcement.']);
+        }
+    } catch (PDOException $e) {
+        error_log("Announcement deletion failed: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Database error occurred.']);
+    }
     exit();
 }
 
 // Fetch announcements
-$announcementsStmt = $pdo->query("SELECT message, created_at, tag FROM announcements ORDER BY created_at DESC LIMIT 1");
+$announcementsStmt = $pdo->query("SELECT id, message, created_at, tag FROM announcements ORDER BY created_at DESC LIMIT 1");
 $latestAnnouncement = $announcementsStmt->fetch(PDO::FETCH_ASSOC);
 
 // Handle announcement submission (via AJAX)
@@ -439,6 +485,7 @@ $philippineHolidays = [
         box-shadow: var(--shadow);
         transition: var(--transition);
         cursor: pointer;
+        position: relative;
     }
 
     .announcement-banner:hover {
@@ -450,6 +497,10 @@ $philippineHolidays = [
         font-size: 24px;
         color: var(--primary);
         margin-right: 15px;
+    }
+
+    .announcement-text {
+        flex: 1;
     }
 
     .announcement-text h3 {
@@ -493,10 +544,24 @@ $philippineHolidays = [
         color: var(--primary);
     }
 
-    .announcement-banner i.fas.fa-chevron-right {
+    .announcement-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         margin-left: auto;
-        color: var(--text-light);
+    }
+
+    .announcement-action-btn {
+        background: none;
+        border: none;
         font-size: 16px;
+        color: var(--text-light);
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .announcement-action-btn:hover {
+        color: var(--primary);
     }
 
     .stats-card {
@@ -1231,6 +1296,17 @@ $philippineHolidays = [
             width: 100%;
             justify-content: space-between;
         }
+        .announcement-banner {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .announcement-text p {
+            max-width: 100%;
+        }
+        .announcement-actions {
+            margin-left: 0;
+            margin-top: 10px;
+        }
     }
 
     .alert-success {
@@ -1251,7 +1327,7 @@ $philippineHolidays = [
             transition-duration: 0.01ms !important;
         }
     }
-</style>
+    </style>
 </head>
 <body>
     <aside class="sidebar">
@@ -1338,7 +1414,7 @@ $philippineHolidays = [
                 <i class="fas fa-bullhorn announcement-icon"></i>
                 <div class="announcement-text">
                     <h3>Today's Announcements</h3>
-                    <p><?php echo htmlspecialchars($latestAnnouncement['message'] ?? 'No announcements today'); ?>
+                    <p id="announcementMessage"><?php echo htmlspecialchars($latestAnnouncement['message'] ?? 'No announcements today'); ?>
                         <?php if ($latestAnnouncement['tag']): ?>
                             <span class="announcement-tag <?php echo htmlspecialchars($latestAnnouncement['tag']); ?>">
                                 <?php echo htmlspecialchars(ucfirst($latestAnnouncement['tag'])); ?>
@@ -1346,7 +1422,14 @@ $philippineHolidays = [
                         <?php endif; ?>
                     </p>
                 </div>
-                <i class="fas fa-chevron-right"></i>
+                <div class="announcement-actions">
+                    <i class="fas fa-chevron-right announcement-action-btn"></i>
+                    <?php if ($latestAnnouncement && ($currentUser['role'] === 'admin' || $currentUser['role'] === 'hr')): ?>
+                        <button class="announcement-action-btn delete-announcement" data-id="<?php echo $latestAnnouncement['id']; ?>">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    <?php endif; ?>
+                </div>
             </section>
 
             <section class="stats-card">
@@ -1724,7 +1807,7 @@ $philippineHolidays = [
         });
 
         if (announcementModal) {
-            document.getElementById('announcementBanner').addEventListener('click', () => {
+            document.querySelector('.announcement-action-btn:not(.delete-announcement)').addEventListener('click', () => {
                 announcementModal.classList.add('active');
             });
 
@@ -1799,8 +1882,42 @@ $philippineHolidays = [
                     console.error('Error:', error);
                     showNotification('An error occurred while submitting the announcement. Please try again.', 'error');
                 });
-            });
+        });
         }
+
+        document.querySelectorAll('.delete-announcement').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (confirm('Are you sure you want to delete this announcement?')) {
+                    const announcementId = this.getAttribute('data-id');
+                    const formData = new FormData();
+                    formData.append('delete_announcement', '1');
+                    formData.append('announcement_id', announcementId);
+                    formData.append('csrf_token', '<?php echo $_SESSION['csrf_token']; ?>');
+
+                    fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        showNotification(data.message, data.success ? 'success' : 'error');
+                        if (data.success) {
+                            setTimeout(() => location.reload(), 2000);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showNotification('An error occurred while deleting the announcement. Please try again.', 'error');
+                    });
+                }
+            });
+        });
 
         function showNotification(message, type) {
             const container = document.getElementById('notificationContainer');
@@ -1965,9 +2082,10 @@ $philippineHolidays = [
                 }
 
                 calendarDays.innerHTML += `
-                    <div class="${classes}" data-date="${dateStr}" data-tooltip="${tooltip}">
+                    <div class="${classes}" data-date="${dateStr}">
                         ${i}
-                        ${dayEvents.length > 0 && !isHoliday ? '<span class="holiday-dot"></span>' : ''}
+                        ${dayEvents.length > 0 && !isHoliday ? '<span class="event-dot"></span>' : ''}
+                        ${tooltip ? `<span class="holiday-tooltip">${tooltip}</span>` : ''}
                     </div>
                 `;
             }
@@ -1978,10 +2096,11 @@ $philippineHolidays = [
                 calendarDays.innerHTML += `<div class="calendar-day other-month">${i}</div>`;
             }
 
-            document.querySelectorAll('.calendar-day.holiday').forEach(day => {
+            document.querySelectorAll('.calendar-day.holiday, .calendar-day.event').forEach(day => {
                 day.addEventListener('click', function() {
                     const date = this.getAttribute('data-date');
                     const holiday = holidays.find(h => h.date === date);
+                    const event = events.find(e => e.event_date === date);
                     if (holiday) {
                         document.getElementById('holidayModalTitle').textContent = holiday.name;
                         document.getElementById('holidayModalDate').textContent = new Date(date).toLocaleDateString('en-US', {
@@ -1989,6 +2108,16 @@ $philippineHolidays = [
                             day: 'numeric',
                             year: 'numeric'
                         });
+                        document.getElementById('holidayModalType').textContent = 'Regular Holiday';
+                        holidayModal.classList.add('active');
+                    } else if (event) {
+                        document.getElementById('holidayModalTitle').textContent = event.title;
+                        document.getElementById('holidayModalDate').textContent = new Date(date).toLocaleDateString('en-US', {
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric'
+                        });
+                        document.getElementById('holidayModalType').textContent = 'Event';
                         holidayModal.classList.add('active');
                     }
                 });
@@ -2005,27 +2134,48 @@ $philippineHolidays = [
             renderCalendar();
         });
 
-        function updatePayrollCard() {
+        function updatePayrollStats() {
             const now = new Date();
-            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-            const daysInMonth = lastDayOfMonth.getDate();
-            const currentDay = now.getDate();
-            const remainingDays = daysInMonth - currentDay;
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const lastDay = new Date(year, month + 1, 0).getDate();
+            const today = now.getDate();
+            const daysUntilPayroll = lastDay - today;
+            
+            document.getElementById('payroll-days').textContent = daysUntilPayroll;
+            document.getElementById('payroll-remaining').textContent = 
+                daysUntilPayroll <= 0 ? 'Payroll processing today' : `${daysUntilPayroll} days until payroll`;
+        }
 
-            document.getElementById('payroll-days').textContent = `${currentDay}/${daysInMonth}`;
-            document.getElementById('payroll-remaining').textContent = `${remainingDays} days until payroll`;
+        function updateWorkingDays() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const lastDay = new Date(year, month + 1, 0).getDate();
+            let workingDays = 0;
+            let holidayCount = 0;
 
-            const monthHolidays = holidays.filter(h => {
-                const hDate = new Date(h.date);
-                return hDate.getMonth() === now.getMonth() && hDate.getFullYear() === now.getFullYear();
-            });
-            const workingDays = daysInMonth - monthHolidays.length;
-            document.getElementById('working-days').textContent = `${workingDays} days`;
-            document.getElementById('holiday-count').textContent = `${monthHolidays.length} holidays`;
+            for (let i = 1; i <= lastDay; i++) {
+                const date = new Date(year, month, i);
+                const dateStr = date.toISOString().split('T')[0];
+                const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                const isHoliday = holidays.some(h => h.date === dateStr);
+
+                if (!isWeekend && !isHoliday) {
+                    workingDays++;
+                }
+                if (isHoliday) {
+                    holidayCount++;
+                }
+            }
+
+            document.getElementById('working-days').textContent = workingDays;
+            document.getElementById('holiday-count').textContent = `${holidayCount} holidays this month`;
         }
 
         renderCalendar();
-        updatePayrollCard();
+        updatePayrollStats();
+        updateWorkingDays();
     </script>
 </body>
 </html>

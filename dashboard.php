@@ -1620,7 +1620,6 @@ $philippineHolidays = [
 
         // Modal Controls
         const timeOffRequestModal = document.getElementById('timeOffRequestModal');
-        const timeOffApproveModal = document.getElementById('timeOffApproveModal');
         const holidayModal = document.getElementById('holidayModal');
 
         document.getElementById('requestTimeOffBtn').addEventListener('click', () => {
@@ -1637,19 +1636,7 @@ $philippineHolidays = [
 
         if (document.getElementById('approveTimeOffBtn')) {
             document.getElementById('approveTimeOffBtn').addEventListener('click', () => {
-                timeOffApproveModal.classList.add('active');
-            });
-        }
-
-        if (document.getElementById('closeApproveModal')) {
-            document.getElementById('closeApproveModal').addEventListener('click', () => {
-                timeOffApproveModal.classList.remove('active');
-            });
-        }
-
-        if (document.getElementById('cancelApprove')) {
-            document.getElementById('cancelApprove').addEventListener('click', () => {
-                timeOffApproveModal.classList.remove('active');
+                window.location.href = 'timeoff.php';
             });
         }
 

@@ -118,7 +118,7 @@ function getBusinessDays($start_date, $end_date) {
         $periods = new DatePeriod($start, new DateInterval('P1D'), $end);
         return iterator_count(array_filter(iterator_to_array($periods), fn($date) => $date->format('N') < 6));
     } catch (Exception $e) {
-        return 0; // Return 0 if date parsing fails
+        return 0;
     }
 }
 
@@ -182,10 +182,8 @@ try {
     $stmt->execute([$user_id]);
     $raw_requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Filter out invalid rows and calculate additional fields
     foreach ($raw_requests as $row) {
         if (is_array($row) && !empty($row['id'])) {
-            // Skip rows with null or invalid dates
             if (empty($row['start_date']) || empty($row['end_date']) || empty($row['created_at'])) {
                 error_log("Skipping invalid time off request for user_id $user_id: " . json_encode($row));
                 continue;
@@ -202,7 +200,6 @@ try {
             error_log("Invalid row in time off requests for user_id $user_id: " . json_encode($row));
         }
     }
-    error_log("Fetched time off requests for user_id $user_id: " . json_encode($requests));
 } catch (PDOException $e) {
     error_log("Time off requests query failed for user_id $user_id: " . $e->getMessage());
     $requests = [];
@@ -245,7 +242,7 @@ $balance = getTimeOffBalance($pdo, $user_id);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Employee Time Off | HRPro</title>
+    <title>Employee Time Off | HRMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
     <style>
@@ -261,12 +258,12 @@ $balance = getTimeOffBalance($pdo, $user_id);
             --text: #2D2A4A;
             --text-light: #A0A0B2;
             --gray: #E5E5E5;
-            --border-radius: 12px;
-            --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.15);
-            --transition: all 0.3s ease;
-            --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0.3);
-            --gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            --border-radius: 16px;
+            --shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --focus-ring: 0 0 0 4px rgba(191, 162, 219, 0.2);
+            --gradient: linear-gradient(145deg, var(--primary) 0%, var(--primary-dark) 100%);
         }
 
         * {
@@ -279,112 +276,100 @@ $balance = getTimeOffBalance($pdo, $user_id);
         body {
             display: flex;
             min-height: 100vh;
-            background: linear-gradient(135deg, var(--light) 0%, var(--white) 100%);
+            background: linear-gradient(145deg, var(--white) 0%, var(--light) 100%);
             color: var(--text);
             line-height: 1.6;
         }
 
         /* Sidebar Styles */
         .sidebar {
-            width: 260px;
+            width: 280px;
             background: var(--gradient);
             color: var(--white);
             box-shadow: var(--shadow);
             transition: var(--transition);
-            position: sticky;
+            position: fixed;
             top: 0;
+            left: 0;
             height: 100vh;
             overflow-y: auto;
+            z-index: 1000;
+            transform: translateX(0);
         }
 
         .sidebar.collapsed {
-            width: 80px;
-        }
-
-        .sidebar.collapsed .logo-text,
-        .sidebar.collapsed .menu-text,
-        .sidebar.collapsed .menu-badge {
-            display: none;
-        }
-
-        .sidebar.collapsed .menu-item {
-            justify-content: center;
+            transform: translateX(-100%);
         }
 
         .sidebar-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
         }
 
         .logo {
             display: flex;
             align-items: center;
+            gap: 12px;
         }
 
         .logo-icon {
-            font-size: 24px;
+            font-size: 28px;
             color: var(--secondary);
-            margin-right: 10px;
         }
 
         .logo-text {
             font-family: 'Poppins', sans-serif;
-            font-size: 24px;
-            font-weight: 600;
-        }
-
-        .toggle-btn {
-            background: none;
-            border: none;
-            font-size: 16px;
-            color: var(--secondary);
-            cursor: pointer;
-            padding: 5px;
-            transition: var(--transition);
-        }
-
-        .toggle-btn:hover {
-            color: var(--white);
-            transform: scale(1.1);
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
         }
 
         .sidebar-menu {
-            padding: 15px 0;
+            padding: 20px 0;
         }
 
         .menu-item {
             display: flex;
             align-items: center;
-            padding: 12px 20px;
+            padding: 14px 24px;
             color: var(--white);
             text-decoration: none;
             transition: var(--transition);
+            border-left: 4px solid transparent;
+            position: relative;
+            overflow: hidden;
         }
 
         .menu-item:hover {
-            background-color: var(--primary-light);
+            background: rgba(255, 255, 255, 0.1);
+            border-left-color: var(--secondary);
             transform: translateX(5px);
         }
 
         .menu-item.active {
-            background-color: var(--primary-light);
-            border-left: 4px solid var(--secondary);
+            background: rgba(255, 255, 255, 0.15);
+            border-left-color: var(--secondary);
         }
 
         .menu-item i {
-            margin-right: 12px;
-            font-size: 18px;
+            margin-right: 14px;
+            font-size: 20px;
+        }
+
+        .menu-text {
+            font-size: 16px;
+            font-weight: 500;
         }
 
         .menu-badge {
+            margin-left: auto;
             background: var(--error);
             color: var(--white);
-            border-radius: 50%;
-            padding: 2px 8px;
-            margin-left: auto;
+            border-radius: 12px;
+            padding: 4px 10px;
             font-size: 12px;
             font-weight: 600;
         }
@@ -392,9 +377,10 @@ $balance = getTimeOffBalance($pdo, $user_id);
         /* Main Content Styles */
         .main-content {
             flex: 1;
-            overflow-y: auto;
-            padding-bottom: 60px;
-            background-color: var(--white);
+            margin-left: 280px;
+            padding: 30px;
+            background: var(--white);
+            transition: var(--transition);
         }
 
         /* Header Styles */
@@ -402,62 +388,83 @@ $balance = getTimeOffBalance($pdo, $user_id);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 30px;
-            background: var(--white);
+            padding: 15px 20px;
+            background: linear-gradient(145deg, var(--white) 0%, var(--light) 100%);
             box-shadow: var(--shadow);
+            border-radius: var(--border-radius);
             position: sticky;
             top: 0;
             z-index: 10;
         }
 
+        .hamburger-menu {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: var(--primary);
+            cursor: pointer;
+            padding: 6px;
+            min-width: 44px;
+            min-height: 44px;
+        }
+
         .header-title h1 {
             font-family: 'Poppins', sans-serif;
-            font-size: 28px;
+            font-size: 24px;
             color: var(--primary);
-            margin-bottom: 5px;
+            font-weight: 700;
+            margin-bottom: 4px;
         }
 
         .header-title p {
             font-size: 14px;
             color: var(--text-light);
+            font-weight: 400;
         }
 
         .header-info {
             display: flex;
             align-items: center;
-            gap: 2px;
+            gap: 16px;
         }
 
         .current-time {
             font-size: 14px;
             color: var(--text-light);
+            font-weight: 500;
         }
 
         .user-profile {
             display: flex;
             align-items: center;
+            gap: 10px;
         }
 
         .user-avatar {
-            width: 44px;
-            height: 44px;
-            background: var(--gradient);
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
             color: var(--white);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-right: 10px;
             font-weight: 600;
             font-size: 16px;
             box-shadow: var(--shadow);
+        }
+
+        .user-profile span {
+            font-size: 14px;
+            font-weight: 500;
         }
 
         /* Content Styles */
         .content {
             max-width: 1200px;
             margin: 40px auto;
-            padding: 0 30px;
+            padding: 0 20px;
         }
 
         .card {
@@ -465,6 +472,7 @@ $balance = getTimeOffBalance($pdo, $user_id);
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
             transition: var(--transition);
+            overflow: hidden;
         }
 
         .card:hover {
@@ -477,17 +485,23 @@ $balance = getTimeOffBalance($pdo, $user_id);
             color: var(--white);
             padding: 20px;
             border-radius: var(--border-radius) var(--border-radius) 0 0;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .card-header h2 {
             font-family: 'Poppins', sans-serif;
             font-size: 24px;
             margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .card-body {
             padding: 30px;
+            background: linear-gradient(135deg, var(--white) 0%, var(--light) 100%);
         }
 
         .alert-success,
@@ -521,13 +535,16 @@ $balance = getTimeOffBalance($pdo, $user_id);
         }
 
         .form-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
             margin-bottom: 30px;
+            align-items: flex-start;
         }
 
         .form-group {
+            flex: 1;
+            min-width: 200px;
             display: flex;
             flex-direction: column;
         }
@@ -557,6 +574,11 @@ $balance = getTimeOffBalance($pdo, $user_id);
             background: var(--white);
         }
 
+        textarea.form-control {
+            min-height: 100px;
+            resize: vertical;
+        }
+
         .btn {
             padding: 14px 24px;
             border-radius: var(--border-radius);
@@ -568,14 +590,15 @@ $balance = getTimeOffBalance($pdo, $user_id);
             align-items: center;
             justify-content: center;
             border: none;
+            min-width: 140px;
+            position: relative;
+            overflow: hidden;
         }
 
         .btn-primary {
-            background: var(--gradient);
+            background: var(--primary);
             color: var(--white);
             box-shadow: var(--shadow);
-            position: relative;
-            overflow: hidden;
         }
 
         .btn-primary:hover {
@@ -602,23 +625,44 @@ $balance = getTimeOffBalance($pdo, $user_id);
             height: 200px;
         }
 
+        .btn-outline-secondary {
+            background: transparent;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-outline-secondary:hover {
+            background: var(--light);
+            color: var(--primary-light);
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+        }
+
         .table-responsive {
             border-radius: var(--border-radius);
-            overflow: hidden;
+            overflow-x: auto;
             box-shadow: var(--shadow);
+            background: var(--white);
         }
 
         .table {
             margin-bottom: 0;
             width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
         }
 
         .table thead th {
             background: var(--primary);
             color: var(--white);
-            padding: 12px;
+            padding: 14px;
             font-weight: 600;
             text-align: left;
+            font-size: 15px;
+            border-bottom: 2px solid var(--primary-dark);
+            position: sticky;
+            top: 0;
+            z-index: 5;
         }
 
         .table tbody tr {
@@ -627,18 +671,29 @@ $balance = getTimeOffBalance($pdo, $user_id);
 
         .table tbody tr:hover {
             background: rgba(191, 162, 219, 0.1);
+            transform: translateX(5px);
         }
 
         .table td {
-            padding: 12px;
+            padding: 14px;
             vertical-align: middle;
             border-top: 1px solid var(--gray);
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        .table td.text-center {
+            text-align: center;
+            color: var(--text-light);
+            font-style: italic;
         }
 
         .badge {
             padding: 6px 12px;
             border-radius: var(--border-radius);
             color: #fff;
+            font-size: 13px;
+            font-weight: 500;
         }
 
         .pending-badge { background: #ffc107; color: #000; }
@@ -662,10 +717,10 @@ $balance = getTimeOffBalance($pdo, $user_id);
 
         .calendar th, .calendar td {
             border: 1px solid var(--gray);
-            padding: 10px;
+            padding: 8px;
             vertical-align: top;
-            min-width: 120px;
-            height: 140px;
+            min-width: 80px;
+            height: 100px;
             position: relative;
             transition: var(--transition);
         }
@@ -675,7 +730,7 @@ $balance = getTimeOffBalance($pdo, $user_id);
             color: var(--white);
             text-align: center;
             font-weight: 600;
-            height: 50px;
+            height: 40px;
         }
 
         .calendar td {
@@ -684,18 +739,18 @@ $balance = getTimeOffBalance($pdo, $user_id);
 
         .calendar .day-number {
             position: absolute;
-            top: 8px;
-            right: 8px;
-            font-size: 16px;
+            top: 4px;
+            right: 4px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--text);
         }
 
         .calendar .day-event {
-            font-size: 14px;
-            margin: 4px 0;
+            font-size: 12px;
+            margin: 2px 0;
             border-radius: 4px;
-            padding: 4px 6px;
+            padding: 2px 4px;
             color: #fff;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -733,12 +788,13 @@ $balance = getTimeOffBalance($pdo, $user_id);
 
         .calendar-legend .badge {
             margin-right: 8px;
+            padding: 4px 8px;
         }
 
         .balance-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
             margin-bottom: 30px;
         }
 
@@ -748,11 +804,29 @@ $balance = getTimeOffBalance($pdo, $user_id);
             padding: 20px;
             text-align: center;
             box-shadow: var(--shadow);
+            transition: var(--transition);
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .balance-card:hover {
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-4px);
         }
 
         .balance-card h4 {
             color: var(--primary);
             margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .balance-card p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .balance-card .text-muted {
+            color: var(--text-light);
         }
 
         @keyframes fadeIn {
@@ -760,55 +834,176 @@ $balance = getTimeOffBalance($pdo, $user_id);
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Responsive Styles */
         @media (max-width: 992px) {
+            .main-content {
+                margin-left: 0;
+            }
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .hamburger-menu {
+                display: block;
+            }
             .content {
-                padding: 0 20px;
+                padding: 0 15px;
                 margin: 20px auto;
             }
             .card-body {
                 padding: 20px;
             }
-            .form-grid, .balance-grid {
-                grid-template-columns: 1fr;
+            .form-grid {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .form-group {
+                min-width: 100%;
+            }
+            .btn {
+                width: 100%;
+                min-width: 0;
+            }
+            .balance-grid {
+                flex-direction: column;
             }
             .calendar th, .calendar td {
-                min-width: 80px;
-                height: 100px;
-                padding: 5px;
+                min-width: 40px;
+                height: 50px;
+                padding: 4px;
+            }
+            .calendar th {
+                font-size: 11px;
             }
             .calendar .day-number {
-                font-size: 14px;
+                font-size: 10px;
             }
             .calendar .day-event {
-                font-size: 12px;
-                padding: 2px 4px;
+                font-size: 9px;
+                padding: 1px 2px;
             }
         }
 
         @media (max-width: 768px) {
-            .sidebar {
-                position: fixed;
-                left: 0;
-                top: 0;
-                bottom: 0;
-                transform: translateX(0);
-                z-index: 1000;
-            }
-            .sidebar.collapsed {
-                transform: translateX(-100%);
-            }
-            .main-content {
-                margin-left: 0;
-            }
             .header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-                padding: 15px;
+                flex-direction: row;
+                align-items: center;
+                padding: 10px 15px;
+                gap: 10px;
+            }
+            .header-title h1 {
+                font-size: 20px;
+                margin-bottom: 2px;
+            }
+            .header-title p {
+                font-size: 12px;
             }
             .header-info {
-                width: 100%;
-                justify-content: space-between;
+                gap: 12px;
+            }
+            .current-time {
+                font-size: 12px;
+            }
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+            .user-profile span {
+                font-size: 12px;
+            }
+            .hamburger-menu {
+                font-size: 18px;
+                padding: 4px;
+            }
+            .table thead th {
+                font-size: 14px;
+                padding: 10px;
+            }
+            .table td {
+                font-size: 13px;
+                padding: 10px;
+            }
+            .balance-card h4 {
+                font-size: 16px;
+            }
+            .balance-card p {
+                font-size: 12px;
+            }
+            .calendar th, .calendar td {
+                min-width: 35px;
+                height: 45px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .header {
+                padding: 8px 12px;
+            }
+            .header-title h1 {
+                font-size: 18px;
+            }
+            .header-title p {
+                font-size: 11px;
+            }
+            .card-header h2 {
+                font-size: 20px;
+            }
+            .btn {
+                padding: 10px 16px;
+                font-size: 13px;
+                min-height: 44px;
+            }
+            .user-profile span {
+                display: none;
+            }
+            .header-info {
+                gap: 8px;
+            }
+            .current-time {
+                font-size: 11px;
+            }
+            .table thead th {
+                font-size: 13px;
+            }
+            .table td {
+                font-size: 12px;
+            }
+            .calendar th, .calendar td {
+                min-width: 30px;
+                height: 40px;
+            }
+            .calendar .day-number {
+                font-size: 9px;
+            }
+            .calendar .day-event {
+                font-size: 8px;
+            }
+            .form-label {
+                font-size: 12px;
+            }
+            .form-control, .form-select {
+                padding: 8px;
+                font-size: 12px;
+            }
+            .alert-success, .alert-error {
+                font-size: 13px;
+                padding: 12px;
+            }
+            .calendar-legend {
+                gap: 8px;
+            }
+            .calendar-legend span {
+                font-size: 12px;
+            }
+            .calendar-legend .badge {
+                padding: 3px 6px;
+                font-size: 11px;
+            }
+            .balance-card {
+                min-width: 100%;
             }
         }
 
@@ -822,69 +1017,63 @@ $balance = getTimeOffBalance($pdo, $user_id);
 </head>
 <body>
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" role="navigation" aria-label="Main navigation">
         <div class="sidebar-header">
             <div class="logo">
-                <i class="fas fa-user-tie logo-icon"></i>
-                <h1 class="logo-text">Employee</h1>
+                <i class="fas fa-user-tie logo-icon" aria-hidden="true"></i>
+                <h1 class="logo-text">HRMS</h1>
             </div>
-            <button class="toggle-btn" id="sidebarToggle">
-                <i class="fas fa-chevron-left"></i>
-            </button>
         </div>
         <nav class="sidebar-menu">
             <a href="Employeedashboard.php" class="menu-item">
-                <i class="fas fa-home"></i>
+                <i class="fas fa-home" aria-hidden="true"></i>
                 <span class="menu-text">Dashboard</span>
             </a>
             <a href="Employeepersonal.php" class="menu-item">
-                <i class="fas fa-user"></i>
+                <i class="fas fa-user" aria-hidden="true"></i>
                 <span class="menu-text">Personal Info</span>
             </a>
             <a href="Employeetimesheet.php" class="menu-item">
-                <i class="fas fa-clock"></i>
+                <i class="fas fa-clock" aria-hidden="true"></i>
                 <span class="menu-text">Timesheet</span>
             </a>
             <a href="Employeetimeoff.php" class="menu-item active">
-                <i class="fas fa-calendar-minus"></i>
+                <i class="fas fa-calendar-minus" aria-hidden="true"></i>
                 <span class="menu-text">Time Off</span>
             </a>
             <a href="Employeeinbox.php" class="menu-item">
-                <i class="fas fa-inbox"></i>
+                <i class="fas fa-inbox" aria-hidden="true"></i>
                 <span class="menu-text">Inbox</span>
                 <?php if ($unreadMessages > 0): ?>
                     <span class="menu-badge"><?php echo htmlspecialchars($unreadMessages); ?></span>
                 <?php endif; ?>
             </a>
-            <a href="logout.php" class="menu-item">
-                <i class="fas fa-sign-out-alt"></i>
+            <a href="employeeView.php" class="menu-item">
+                <i class="fas fa-chart-line" aria-hidden="true"></i>
+                <span class="menu-text">Performance</span>
+            </a>
+            <a href="login.html" class="menu-item">
+                <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
                 <span class="menu-text">Logout</span>
             </a>
         </nav>
     </aside>
 
     <!-- Main Content -->
-    <main class="main-content">
+    <main class="main-content" role="main">
         <!-- Header -->
-        <header class="header">
+        <header class="header" role="banner">
+            <button class="hamburger-menu" id="hamburgerMenu" aria-label="Open sidebar" aria-expanded="false" aria-controls="sidebar">
+                <i class="fas fa-bars"></i>
+            </button>
             <div class="header-title">
                 <h1>Time Off</h1>
-                <p>Manage your leave requests</p>
+                <p>Manage leave</p>
             </div>
             <div class="header-info">
-                <div class="current-time" id="currentTime">
-                    <?php 
-                    date_default_timezone_set('Asia/Manila');
-                    echo date('l, F j, Y g:i A'); 
-                    ?>
-                </div>
+                <div class="current-time" id="currentTime"></div>
                 <div class="user-profile">
-                    <div class="user-avatar">
-                        <?php 
-                        $initials = substr($user['username'] ?? '', 0, 2) ?: 'UK';
-                        echo htmlspecialchars($initials);
-                        ?>
-                    </div>
+                    <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'] ?? $user['username'], 0, 1)); ?></div>
                     <span><?php echo htmlspecialchars($user['username'] . ' - ' . ucfirst($user['role'])); ?></span>
                 </div>
             </div>
@@ -894,42 +1083,42 @@ $balance = getTimeOffBalance($pdo, $user_id);
         <div class="content">
             <div class="card">
                 <div class="card-header">
-                    <h2><i class="fas fa-calendar-minus me-2"></i>My Time Off</h2>
+                    <h2><i class="fas fa-calendar-minus" aria-hidden="true"></i>My Time Off</h2>
                 </div>
                 <div class="card-body">
                     <!-- Notifications -->
                     <?php if ($success_message): ?>
                         <div class="alert-success" role="alert">
-                            <i class="fas fa-check-circle"></i>
+                            <i class="fas fa-check-circle" aria-hidden="true"></i>
                             <?php echo htmlspecialchars($success_message); ?>
                         </div>
                     <?php endif; ?>
                     <?php if ($error_message): ?>
                         <div class="alert-error" role="alert">
-                            <i class="fas fa-exclamation-circle"></i>
+                            <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
                             <?php echo htmlspecialchars($error_message); ?>
                         </div>
                     <?php endif; ?>
 
                     <!-- Leave Balance -->
-                    <h3 class="mb-4">Leave Balance</h3>
+                    <h3 class="mb-3">Leave Balance</h3>
                     <div class="balance-grid">
                         <?php foreach ($balance as $type => $data): ?>
                             <div class="balance-card">
                                 <h4><?php echo ucfirst($type); ?></h4>
-                                <p><?php echo $data['remaining']; ?> days remaining</p>
+                                <p><?php echo $data['remaining']; ?> days left</p>
                                 <p class="text-muted">Used: <?php echo $data['used']; ?> / Total: <?php echo $data['total']; ?></p>
                             </div>
                         <?php endforeach; ?>
                     </div>
 
                     <!-- Request Form -->
-                    <h3 class="mb-4">Request Time Off</h3>
+                    <h3 class="mb-3">Request Time Off</h3>
                     <form action="Employeetimeoff.php" method="POST" class="form-grid">
                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
                         <div class="form-group">
                             <label for="leave_type" class="form-label">Leave Type</label>
-                            <select class="form-select" id="leave_type" name="leave_type" required>
+                            <select class="form-select" id="leave_type" name="leave_type" required aria-required="true">
                                 <option value="">Select Type</option>
                                 <option value="vacation">Vacation</option>
                                 <option value="sick">Sick</option>
@@ -948,21 +1137,21 @@ $balance = getTimeOffBalance($pdo, $user_id);
                         </div>
                         <div class="form-group">
                             <label for="notes" class="form-label">Notes (Optional)</label>
-                            <textarea class="form-control" id="notes" name="notes" rows="4"></textarea>
+                            <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
                         </div>
-                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                        <div class="form-group">
                             <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-paper-plane me-2"></i>Submit Request
+                                <i class="fas fa-paper-plane me-2" aria-hidden="true"></i>Submit
                             </button>
                         </div>
                     </form>
 
                     <!-- Calendar -->
-                    <h3 class="mb-4">Time Off Calendar</h3>
-                    <div class="mb-3">
-                        <button class="btn btn-outline-secondary" id="prevMonth"><i class="fas fa-chevron-left"></i></button>
+                    <h3 class="mb-3">Calendar</h3>
+                    <div class="mb-2">
+                        <button class="btn btn-outline-secondary" id="prevMonth" aria-label="Previous month"><i class="fas fa-chevron-left"></i></button>
                         <button class="btn btn-outline-secondary" id="currentMonth"><?php echo date('F Y'); ?></button>
-                        <button class="btn btn-outline-secondary" id="nextMonth"><i class="fas fa-chevron-right"></i></button>
+                        <button class="btn btn-outline-secondary" id="nextMonth" aria-label="Next month"><i class="fas fa-chevron-right"></i></button>
                     </div>
                     <div class="calendar-legend">
                         <span><span class="badge vacation-badge"></span>Vacation</span>
@@ -972,10 +1161,10 @@ $balance = getTimeOffBalance($pdo, $user_id);
                         <span><span class="badge other-badge"></span>Other</span>
                     </div>
                     <div class="calendar-container">
-                        <table class="calendar">
+                        <table class="calendar" role="grid" aria-label="Time off calendar">
                             <thead>
                                 <tr>
-                                    <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+                                    <th scope="col">Sun</th><th scope="col">Mon</th><th scope="col">Tue</th><th scope="col">Wed</th><th scope="col">Thu</th><th scope="col">Fri</th><th scope="col">Sat</th>
                                 </tr>
                             </thead>
                             <tbody id="calendarBody"></tbody>
@@ -983,17 +1172,17 @@ $balance = getTimeOffBalance($pdo, $user_id);
                     </div>
 
                     <!-- Request History -->
-                    <h3 class="mb-4 mt-5">Request History</h3>
+                    <h3 class="mb-3 mt-4">History</h3>
                     <div class="table-responsive">
-                        <table class="table">
+                        <table class="table" role="grid" aria-label="Time off request history">
                             <thead>
                                 <tr>
-                                    <th>Type</th>
-                                    <th>Dates</th>
-                                    <th>Duration</th>
-                                    <th>Notes</th>
-                                    <th>Status</th>
-                                    <th>Requested</th>
+                                    <th scope="col">Type</th>
+                                    <th scope="col">Dates</th>
+                                    <th scope="col">Days</th>
+                                    <th scope="col">Notes</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Requested</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1008,7 +1197,7 @@ $balance = getTimeOffBalance($pdo, $user_id);
                                                 echo "$start_date - $end_date";
                                                 ?>
                                             </td>
-                                            <td><?php echo (isset($row['business_days']) ? $row['business_days'] : '0'); ?> business days</td>
+                                            <td><?php echo (isset($row['business_days']) ? $row['business_days'] : '0'); ?> days</td>
                                             <td><?php echo htmlspecialchars($row['notes'] ?: 'N/A'); ?></td>
                                             <td><span class="badge <?php echo htmlspecialchars($row['status'] ?? 'pending'); ?>-badge"><?php echo ucfirst(htmlspecialchars($row['status'] ?? 'Unknown')); ?></span></td>
                                             <td><?php echo !empty($row['created_at']) && strtotime($row['created_at']) ? date('M d, Y', strtotime($row['created_at'])) : 'N/A'; ?></td>
@@ -1016,7 +1205,7 @@ $balance = getTimeOffBalance($pdo, $user_id);
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="6" class="text-center py-4">No time off requests found</td>
+                                        <td colspan="6" class="text-center">No requests found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -1030,27 +1219,47 @@ $balance = getTimeOffBalance($pdo, $user_id);
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script>
-        // Sidebar Toggle
-        document.getElementById('sidebarToggle').addEventListener('click', function() {
-            document.querySelector('.sidebar').classList.toggle('collapsed');
-        });
-
-        // Current Time Update
+        // Update current time
         function updateTime() {
             const timeElement = document.getElementById('currentTime');
-            const now = new Date();
-            timeElement.textContent = now.toLocaleString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric',
-                hour12: true
-            });
+            if (timeElement) {
+                const now = new Date();
+                timeElement.textContent = now.toLocaleString('en-US', {
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    hour12: true
+                });
+            }
         }
         setInterval(updateTime, 1000);
         updateTime();
+
+        // Sidebar toggle
+        const sidebar = document.querySelector('.sidebar');
+        const hamburgerMenu = document.getElementById('hamburgerMenu');
+
+        hamburgerMenu?.addEventListener('click', () => {
+            sidebar.classList.toggle('active');
+            hamburgerMenu.setAttribute('aria-expanded', sidebar.classList.contains('active'));
+        });
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 992 && sidebar.classList.contains('active')) {
+                if (!sidebar.contains(e.target) && !hamburgerMenu.contains(e.target)) {
+                    sidebar.classList.remove('active');
+                    hamburgerMenu.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
+
+        // Close sidebar on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && window.innerWidth <= 992) {
+                sidebar.classList.remove('active');
+                hamburgerMenu.setAttribute('aria-expanded', 'false');
+            }
+        });
 
         // Flatpickr for Dates
         flatpickr('#start_date, #end_date', {
@@ -1090,10 +1299,10 @@ $balance = getTimeOffBalance($pdo, $user_id);
                     } else {
                         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                         const hasEvents = calendarData[dateStr]?.length > 0;
-                        html += `<td class="${hasEvents ? 'has-events' : ''}"><div class="day-number">${day}</div>`;
+                        html += `<td class="${hasEvents ? 'has-events' : ''}" role="gridcell"><div class="day-number">${day}</div>`;
                         if (hasEvents) {
                             calendarData[dateStr].forEach(event => {
-                                html += `<div class="day-event ${event.type}-badge">${event.type}</div>`;
+                                html += `<div class="day-event ${event.type}-badge" title="${event.type}">${event.type}</div>`;
                             });
                         }
                         html += '</td>';

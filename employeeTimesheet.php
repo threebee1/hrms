@@ -123,8 +123,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             } else {
                 // Insert new timesheet entry
                 $stmt = $pdo->prepare("
-                    INSERT INTO timesheets (employee_id, date, clock_in, status)
-                    VALUES (?, ?, ?, 'approved')
+                    INSERT INTO timesheets (employee_id, date, clock_in)
+                    VALUES (?, ?, ?)
                 ");
                 $stmt->execute([$user_id, $date, $current_time]);
                 error_log("Clock-in recorded successfully for user_id: $user_id, date: $date, clock_in: $current_time");
@@ -161,22 +161,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 } else {
                     $interval = $clock_in_time->diff($clock_out_time);
                     $total_minutes = ($interval->h * 60) + $interval->i;
-                    $break_duration = $total_minutes < 60 ? 0 : 60; // No break if less than 60 minutes
-                    $total_hours = ($total_minutes - $break_duration) / 60;
+                    $total_hours = $total_minutes / 60;
 
-                    if ($total_hours < 0) {
-                        $error_message = "Invalid timesheet: Total hours cannot be negative.";
-                        error_log("Negative total hours: $total_hours for user_id: $user_id, date: $date");
-                    } else {
-                        $stmt = $pdo->prepare("
-                            UPDATE timesheets 
-                            SET clock_out = ?, break_duration = ?, total_hours = ?, status = 'approved'
-                            WHERE id = ?
-                        ");
-                        $stmt->execute([$current_time, $break_duration, $total_hours, $timesheet['id']]);
-                        error_log("Clock-out recorded successfully for user_id: $user_id, date: $date, total_hours: $total_hours, break_duration: $break_duration");
-                        $success_message = "Clock-out recorded successfully at $current_time!";
-                    }
+                    $stmt = $pdo->prepare("
+                        UPDATE timesheets 
+                        SET clock_out = ?, total_hours = ?
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$current_time, $total_hours, $timesheet['id']]);
+                    error_log("Clock-out recorded successfully for user_id: $user_id, date: $date, total_hours: $total_hours");
+                    $success_message = "Clock-out recorded successfully at $current_time!";
                 }
             }
 
@@ -186,12 +180,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             error_log("Timesheet clock-out failed: " . $e->getMessage());
             $error_message = "Error recording clock-out. Please try again.";
         }
+    } elseif ($action === 'download_excel') {
+        // Fetch timesheet data for Excel
+        $stmt = $pdo->prepare("
+            SELECT date, clock_in, clock_out, total_hours
+            FROM timesheets
+            WHERE employee_id = ?
+            ORDER BY date DESC
+        ");
+        $stmt->execute([$user_id]);
+        $timesheets = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Set headers for Excel download
+        header('Content-Type: application/vnd.ms-excel');
+        header('Content-Disposition: attachment;filename="Timesheet_' . date('Y-m-d') . '.xls"');
+        header('Cache-Control: max-age=0');
+
+        // Output Excel content
+        echo "Date\tClock In\tClock Out\tTotal Hours\n";
+        foreach ($timesheets as $row) {
+            echo htmlspecialchars($row['date']) . "\t" .
+                 htmlspecialchars($row['clock_in'] ?: 'N/A') . "\t" .
+                 htmlspecialchars($row['clock_out'] ?: 'N/A') . "\t" .
+                 htmlspecialchars(formatTotalHours($row['total_hours'])) . "\n";
+        }
+        exit();
     }
 }
 
 // Fetch employee's timesheet data
 $search_date = isset($_GET['date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date']) ? $_GET['date'] : null;
-$query = "SELECT id, date, clock_in, clock_out, break_duration, total_hours, status
+$query = "SELECT id, date, clock_in, clock_out, total_hours
           FROM timesheets
           WHERE employee_id = ?
           " . ($search_date ? "AND date = ?" : "") . "
@@ -216,7 +235,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Employee Timesheet | HRPro</title>
+    <title>Employee Timesheet | HRMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
         :root {
@@ -231,12 +250,12 @@ try {
             --text: #2D2A4A;
             --text-light: #A0A0B2;
             --gray: #E5E5E5;
-            --border-radius: 12px;
-            --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.15);
-            --transition: all 0.3s ease;
-            --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0.3);
-            --gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            --border-radius: 16px;
+            --shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --focus-ring: 0 0 0 4px rgba(191, 162, 219, 0.2);
+            --gradient: linear-gradient(145deg, var(--primary) 0%, var(--primary-dark) 100%);
         }
 
         * {
@@ -249,181 +268,209 @@ try {
         body {
             display: flex;
             min-height: 100vh;
-            background: linear-gradient(135deg, var(--light) 0%, var(--white) 100%);
+            background: linear-gradient(145deg, var(--white) 0%, var(--light) 100%);
             color: var(--text);
             line-height: 1.6;
         }
 
+        /* Sidebar Styles */
         .sidebar {
-            width: 260px;
+            width: 280px;
             background: var(--gradient);
             color: var(--white);
             box-shadow: var(--shadow);
             transition: var(--transition);
-            position: sticky;
+            position: fixed;
             top: 0;
+            left: 0;
             height: 100vh;
             overflow-y: auto;
+            z-index: 1000;
+            transform: translateX(0);
         }
 
         .sidebar.collapsed {
-            width: 80px;
-        }
-
-        .sidebar.collapsed .logo-text,
-        .sidebar.collapsed .menu-text,
-        .sidebar.collapsed .menu-badge {
-            display: none;
-        }
-
-        .sidebar.collapsed .menu-item {
-            justify-content: center;
+            transform: translateX(-100%);
         }
 
         .sidebar-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
         }
 
         .logo {
             display: flex;
             align-items: center;
+            gap: 12px;
         }
 
         .logo-icon {
-            font-size: 24px;
+            font-size: 28px;
             color: var(--secondary);
-            margin-right: 10px;
         }
 
         .logo-text {
             font-family: 'Poppins', sans-serif;
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
         }
 
         .toggle-btn {
             background: none;
             border: none;
-            font-size: 16px;
+            font-size: 18px;
             color: var(--secondary);
             cursor: pointer;
-            padding: 5px;
+            padding: 8px;
+            border-radius: 8px;
             transition: var(--transition);
         }
 
         .toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
             color: var(--white);
-            transform: scale(1.1);
         }
 
         .sidebar-menu {
-            padding: 15px 0;
+            padding: 20px 0;
         }
 
         .menu-item {
             display: flex;
             align-items: center;
-            padding: 12px 20px;
+            padding: 14px 24px;
             color: var(--white);
             text-decoration: none;
             transition: var(--transition);
+            border-left: 4px solid transparent;
+            position: relative;
+            overflow: hidden;
         }
 
         .menu-item:hover {
-            background-color: var(--primary-light);
+            background: rgba(255, 255, 255, 0.1);
+            border-left-color: var(--secondary);
             transform: translateX(5px);
         }
 
         .menu-item.active {
-            background-color: var(--primary-light);
-            border-left: 4px solid var(--secondary);
+            background: rgba(255, 255, 255, 0.15);
+            border-left-color: var(--secondary);
         }
 
         .menu-item i {
-            margin-right: 12px;
-            font-size: 18px;
+            margin-right: 14px;
+            font-size: 20px;
+        }
+
+        .menu-text {
+            font-size: 16px;
+            font-weight: 500;
         }
 
         .menu-badge {
+            margin-left: auto;
             background: var(--error);
             color: var(--white);
-            border-radius: 50%;
-            padding: 2px 8px;
-            margin-left: auto;
+            border-radius: 12px;
+            padding: 4px 10px;
             font-size: 12px;
             font-weight: 600;
         }
 
+        /* Main Content Styles */
         .main-content {
             flex: 1;
-            overflow-y: auto;
-            padding-bottom: 60px;
-            background-color: var(--white);
+            margin-left: 280px;
+            padding: 30px;
+            background: var(--white);
+            transition: var(--transition);
         }
 
+        /* Header Styles */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 30px;
-            background: var(--white);
+            padding: 15px 20px;
+            background: linear-gradient(145deg, var(--white) 0%, var(--light) 100%);
             box-shadow: var(--shadow);
+            border-radius: var(--border-radius);
             position: sticky;
             top: 0;
             z-index: 10;
         }
 
+        .hamburger-menu {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: var(--primary);
+            cursor: pointer;
+            padding: 6px;
+        }
+
         .header-title h1 {
             font-family: 'Poppins', sans-serif;
-            font-size: 28px;
+            font-size: 24px;
             color: var(--primary);
-            margin-bottom: 5px;
+            font-weight: 700;
+            margin-bottom: 4px;
         }
 
         .header-title p {
             font-size: 14px;
             color: var(--text-light);
+            font-weight: 400;
         }
 
         .header-info {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 16px;
         }
 
         .current-time {
             font-size: 14px;
             color: var(--text-light);
+            font-weight: 500;
         }
 
         .user-profile {
             display: flex;
             align-items: center;
+            gap: 10px;
         }
 
         .user-avatar {
-            width: 44px;
-            height: 44px;
-            background: var(--gradient);
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
             color: var(--white);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-right: 10px;
             font-weight: 600;
             font-size: 16px;
             box-shadow: var(--shadow);
         }
 
+        .user-profile span {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* Content Styles */
         .content {
             max-width: 1200px;
             margin: 40px auto;
-            padding: 0 30px;
+            padding: 0 20px;
         }
 
         .card {
@@ -431,6 +478,7 @@ try {
             border-radius: var(--border-radius);
             box-shadow: var(--shadow);
             transition: var(--transition);
+            overflow: hidden;
         }
 
         .card:hover {
@@ -443,17 +491,23 @@ try {
             color: var(--white);
             padding: 20px;
             border-radius: var(--border-radius) var(--border-radius) 0 0;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .card-header h2 {
             font-family: 'Poppins', sans-serif;
             font-size: 24px;
             margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .card-body {
             padding: 30px;
+            background: linear-gradient(135deg, var(--white) 0%, var(--light) 100%);
         }
 
         .alert-success,
@@ -487,15 +541,18 @@ try {
         }
 
         .form-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 24px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
             margin-bottom: 30px;
+            align-items: center;
+            justify-content: space-between;
         }
 
         .form-group {
             display: flex;
-            flex-direction: column;
+            gap: 15px;
+            flex-wrap: wrap;
         }
 
         .btn {
@@ -509,14 +566,15 @@ try {
             align-items: center;
             justify-content: center;
             border: none;
+            min-width: 140px;
+            position: relative;
+            overflow: hidden;
         }
 
         .btn-primary {
-            background: var(--gradient);
+            background: var(--primary);
             color: var(--white);
             box-shadow: var(--shadow);
-            position: relative;
-            overflow: hidden;
         }
 
         .btn-primary:hover {
@@ -543,23 +601,41 @@ try {
             height: 200px;
         }
 
+        .btn-secondary {
+            background: var(--secondary);
+            color: var(--primary);
+            box-shadow: var(--shadow);
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary-light);
+            color: var(--white);
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+        }
+
         .table-responsive {
             border-radius: var(--border-radius);
             overflow: hidden;
             box-shadow: var(--shadow);
+            background: var(--white);
         }
 
         .table {
             margin-bottom: 0;
             width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
         }
 
         .table thead th {
             background: var(--primary);
             color: var(--white);
-            padding: 12px;
+            padding: 14px;
             font-weight: 600;
             text-align: left;
+            font-size: 15px;
+            border-bottom: 2px solid var(--primary-dark);
         }
 
         .table tbody tr {
@@ -568,12 +644,21 @@ try {
 
         .table tbody tr:hover {
             background: rgba(191, 162, 219, 0.1);
+            transform: translateX(5px);
         }
 
         .table td {
-            padding: 12px;
+            padding: 14px;
             vertical-align: middle;
             border-top: 1px solid var(--gray);
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        .table td.text-center {
+            text-align: center;
+            color: var(--text-light);
+            font-style: italic;
         }
 
         @keyframes fadeIn {
@@ -581,43 +666,113 @@ try {
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Responsive Styles */
         @media (max-width: 992px) {
+            .main-content {
+                margin-left: 0;
+            }
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .hamburger-menu {
+                display: block;
+            }
             .content {
-                padding: 0 20px;
+                padding: 0 15px;
                 margin: 20px auto;
             }
             .card-body {
                 padding: 20px;
             }
             .form-grid {
-                grid-template-columns: 1fr;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .form-group {
+                flex-direction: column;
+                width: 100%;
+            }
+            .btn {
+                width: 100%;
             }
         }
 
         @media (max-width: 768px) {
-            .sidebar {
-                position: fixed;
-                left: 0;
-                top: 0;
-                bottom: 0;
-                transform: translateX(0);
-                z-index: 1000;
-            }
-            .sidebar.collapsed {
-                transform: translateX(-100%);
-            }
-            .main-content {
-                margin-left: 0;
-            }
             .header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-                padding: 15px;
+                flex-direction: row;
+                align-items: center;
+                padding: 10px 15px;
+                gap: 10px;
+            }
+            .header-title h1 {
+                font-size: 20px;
+                margin-bottom: 2px;
+            }
+            .header-title p {
+                font-size: 12px;
             }
             .header-info {
-                width: 100%;
-                justify-content: space-between;
+                gap: 12px;
+            }
+            .current-time {
+                font-size: 12px;
+            }
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+            .user-profile span {
+                font-size: 12px;
+            }
+            .hamburger-menu {
+                font-size: 18px;
+                padding: 4px;
+            }
+            .table thead th {
+                font-size: 14px;
+                padding: 10px;
+            }
+            .table td {
+                font-size: 13px;
+                padding: 10px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .header {
+                padding: 8px 12px;
+            }
+            .header-title h1 {
+                font-size: 18px;
+            }
+            .header-title p {
+                font-size: 11px;
+            }
+            .card-header h2 {
+                font-size: 20px;
+            }
+            .btn {
+                padding: 10px 16px;
+                font-size: 13px;
+            }
+            .user-profile span {
+                display: none;
+            }
+            .header-info {
+                gap: 8px;
+            }
+            .current-time {
+                font-size: 11px;
+            }
+            .table thead th {
+                font-size: 13px;
+            }
+            .table td {
+                font-size: 12px;
             }
         }
 
@@ -635,11 +790,8 @@ try {
         <div class="sidebar-header">
             <div class="logo">
                 <i class="fas fa-user-tie logo-icon"></i>
-                <h1 class="logo-text">Employee</h1>
+                <h1 class="logo-text">HRMS</h1>
             </div>
-            <button class="toggle-btn" id="sidebarToggle">
-                <i class="fas fa-chevron-left"></i>
-            </button>
         </div>
         <nav class="sidebar-menu">
             <a href="Employeedashboard.php" class="menu-item">
@@ -665,6 +817,11 @@ try {
                     <span class="menu-badge"><?php echo htmlspecialchars($unreadMessages); ?></span>
                 <?php endif; ?>
             </a>
+            <a href="employeeView.php" class="menu-item">
+    <i class="fas fa-chart-line"></i>
+    <span class="menu-text">Performance</span>
+</a>
+
             <a href="login.html" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>
@@ -676,24 +833,17 @@ try {
     <main class="main-content">
         <!-- Header -->
         <header class="header">
+            <button class="hamburger-menu" id="hamburgerMenu">
+                <i class="fas fa-bars"></i>
+            </button>
             <div class="header-title">
                 <h1>Timesheet</h1>
                 <p>Log your work hours</p>
             </div>
             <div class="header-info">
-                <div class="current-time" id="currentTime">
-                    <?php 
-                    date_default_timezone_set('Asia/Manila');
-                    echo date('l, F j, Y g:i A'); 
-                    ?>
-                </div>
+                <div class="current-time" id="currentTime"></div>
                 <div class="user-profile">
-                    <div class="user-avatar">
-                        <?php 
-                        $initials = substr($user['username'] ?? '', 0, 2) ?: 'UK';
-                        echo htmlspecialchars($initials);
-                        ?>
-                    </div>
+                    <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'] ?? $user['username'], 0, 1)); ?></div>
                     <span><?php echo htmlspecialchars($user['username'] . ' - ' . ucfirst($user['role'])); ?></span>
                 </div>
             </div>
@@ -703,7 +853,7 @@ try {
         <div class="content">
             <div class="card">
                 <div class="card-header">
-                    <h2><i class="fas fa-clock me-2"></i>My Timesheet</h2>
+                    <h2><i class="fas fa-clock"></i>My Timesheet</h2>
                 </div>
                 <div class="card-body">
                     <!-- Notifications -->
@@ -730,12 +880,15 @@ try {
                     <form action="Employeetimesheet.php" method="POST" class="form-grid">
                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
                         <input type="hidden" name="date" value="<?php echo date('Y-m-d'); ?>">
-                        <div class="form-group" style="display: flex; align-items: flex-end; gap: 10px;">
+                        <div class="form-group">
                             <button type="submit" name="action" value="clock_in" class="btn btn-primary">
                                 <i class="fas fa-sign-in-alt me-2"></i>Clock In
                             </button>
                             <button type="submit" name="action" value="clock_out" class="btn btn-primary">
                                 <i class="fas fa-sign-out-alt me-2"></i>Clock Out
+                            </button>
+                            <button type="submit" name="action" value="download_excel" class="btn btn-secondary">
+                                <i class="fas fa-file-excel me-2"></i>Download as Excel
                             </button>
                         </div>
                     </form>
@@ -748,9 +901,7 @@ try {
                                     <th>Date</th>
                                     <th>Clock In</th>
                                     <th>Clock Out</th>
-                                    <th>Break (mins)</th>
                                     <th>Total Hours</th>
-                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -760,14 +911,12 @@ try {
                                             <td><?php echo htmlspecialchars($row['date']); ?></td>
                                             <td><?php echo htmlspecialchars($row['clock_in'] ?: 'N/A'); ?></td>
                                             <td><?php echo htmlspecialchars($row['clock_out'] ?: 'N/A'); ?></td>
-                                            <td><?php echo htmlspecialchars($row['break_duration'] ?: '0'); ?></td>
                                             <td><?php echo htmlspecialchars(formatTotalHours($row['total_hours'])); ?></td>
-                                            <td><?php echo htmlspecialchars(ucfirst($row['status'])); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="6" class="text-center py-4">No timesheet records found</td>
+                                        <td colspan="4" class="text-center">No timesheet records found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>
@@ -780,27 +929,44 @@ try {
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script>
-        // Sidebar Toggle
-        document.getElementById('sidebarToggle').addEventListener('click', function() {
-            document.querySelector('.sidebar').classList.toggle('collapsed');
-        });
-
-        // Current Time Update
+        // Update current time
         function updateTime() {
             const timeElement = document.getElementById('currentTime');
-            const now = new Date();
-            timeElement.textContent = now.toLocaleString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric',
-                hour12: true
-            });
+            if (timeElement) {
+                const now = new Date();
+                timeElement.textContent = now.toLocaleString('en-US', {
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    hour12: true
+                });
+            }
         }
         setInterval(updateTime, 1000);
         updateTime();
+
+        // Sidebar toggle
+        const sidebar = document.querySelector('.sidebar');
+        const hamburgerMenu = document.getElementById('hamburgerMenu');
+
+        hamburgerMenu?.addEventListener('click', () => {
+            sidebar.classList.toggle('active');
+        });
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 992 && sidebar.classList.contains('active')) {
+                if (!sidebar.contains(e.target) && !hamburgerMenu.contains(e.target)) {
+                    sidebar.classList.remove('active');
+                }
+            }
+        });
+
+        // Close sidebar on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && window.innerWidth <= 992) {
+                sidebar.classList.remove('active');
+            }
+        });
 
         // Auto-dismiss Notifications
         document.querySelectorAll('.alert-success, .alert-error').forEach(alert => {

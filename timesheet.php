@@ -19,6 +19,7 @@ $dbpass = getenv('DB_PASS') ?: '';
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname", $dbuser, $dbpass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec("SET time_zone = '+08:00'");
 } catch (PDOException $e) {
     error_log("Database connection failed: " . $e->getMessage());
     die('Internal server error');
@@ -69,11 +70,22 @@ function calculateTotalHours($clock_in, $clock_out, $break_duration) {
     return max(0, $total_hours); // Ensure we don't return negative hours
 }
 
+// Function to format total_hours as HH:MM
+function formatTotalHours($total_hours) {
+    if (!isset($total_hours) || $total_hours === null) {
+        return 'N/A';
+    }
+    $hours = floor($total_hours);
+    $minutes = round(($total_hours - $hours) * 60);
+    return sprintf("%02d:%02d", $hours, $minutes);
+}
+
 // Handle export requests
 if (isset($_GET['export'])) {
     $export_type = $_GET['export'];
     $search_employee_id = isset($_GET['employee_id']) ? intval($_GET['employee_id']) : null;
     $search_date = isset($_GET['date']) ? $_GET['date'] : null;
+    $sort = isset($_GET['sort']) ? $_GET['sort'] : 'date_desc';
    
     // Validate date format if provided
     if ($search_date && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $search_date)) {
@@ -81,7 +93,7 @@ if (isset($_GET['export'])) {
     }
    
     // Generate the data for export
-    $export_data = getTimesheetData($pdo, $search_employee_id, $search_date);
+    $export_data = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
    
     if ($export_type === 'pdf') {
         exportAsPDF($export_data);
@@ -92,7 +104,7 @@ if (isset($_GET['export'])) {
 }
 
 // Function to get timesheet data
-function getTimesheetData($pdo, $employee_id = null, $date = null) {
+function getTimesheetData($pdo, $employee_id = null, $date = null, $sort = 'date_desc') {
     $whereClauses = [];
     $params = [];
     
@@ -110,12 +122,36 @@ function getTimesheetData($pdo, $employee_id = null, $date = null) {
         $whereSql = 'WHERE ' . implode(' AND ', $whereClauses);
     }
 
+    // Validate sort parameter
+    $valid_sorts = ['date_desc', 'date_asc', 'name_asc', 'name_desc'];
+    if (!in_array($sort, $valid_sorts)) {
+        $sort = 'date_desc';
+    }
+
+    // Determine ORDER BY clause based on sort parameter
+    $orderBy = '';
+    switch ($sort) {
+        case 'name_asc':
+            $orderBy = 'ORDER BY e.first_name ASC, e.last_name ASC';
+            break;
+        case 'name_desc':
+            $orderBy = 'ORDER BY e.first_name DESC, e.last_name DESC';
+            break;
+        case 'date_asc':
+            $orderBy = 'ORDER BY ts.date ASC';
+            break;
+        case 'date_desc':
+        default:
+            $orderBy = 'ORDER BY ts.date DESC';
+            break;
+    }
+
     $query = "SELECT ts.id, e.first_name, e.last_name, ts.date, ts.clock_in, ts.clock_out,
-                     ts.break_duration, ts.total_hours, ts.status
+                     ts.break_duration, ts.total_hours
               FROM timesheets ts
               JOIN employees e ON ts.employee_id = e.id
               $whereSql
-              ORDER BY ts.date DESC";
+              $orderBy";
 
     $stmt = $pdo->prepare($query);
     if (!empty($params)) {
@@ -161,7 +197,7 @@ function exportAsPDF($data) {
             <td>' . htmlspecialchars($row['clock_in']) . '</td>
             <td>' . htmlspecialchars($row['clock_out']) . '</td>
             <td>' . htmlspecialchars($row['break_duration']) . '</td>
-            <td>' . htmlspecialchars($row['total_hours']) . '</td>
+            <td>' . htmlspecialchars(formatTotalHours($row['total_hours'])) . '</td>
         </tr>';
     }
    
@@ -194,29 +230,11 @@ function exportAsExcel($data) {
             <td>' . htmlspecialchars($row['clock_in']) . '</td>
             <td>' . htmlspecialchars($row['clock_out']) . '</td>
             <td>' . htmlspecialchars($row['break_duration']) . '</td>
-            <td>' . htmlspecialchars($row['total_hours']) . '</td>
+            <td>' . htmlspecialchars(formatTotalHours($row['total_hours'])) . '</td>
         </tr>';
     }
    
     echo '</table>';
-    exit();
-}
-
-// Handle timesheet updates
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['timesheet_id'])) {
-    $timesheet_id = intval($_POST['timesheet_id']);
-    $employee_id = isset($_POST['employee_id']) ? intval($_POST['employee_id']) : null;
-    $date = isset($_POST['date']) ? $_POST['date'] : null;
-   
-    // Status field should exist in the form
-    $status = isset($_POST['status']) ? $_POST['status'] : '';
-   
-    // Update the timesheet record
-    $update_query = "UPDATE timesheets SET status = ? WHERE id = ?";
-    $update_stmt = $pdo->prepare($update_query);
-    $update_stmt->execute([$status, $timesheet_id]);
-   
-    header('Location: timesheet.php?update=success&employee_id='.$employee_id.'&date='.$date);
     exit();
 }
 
@@ -243,7 +261,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_timesheet'])) 
     // Insert the timesheet record
     $insert_query = "INSERT INTO timesheets 
                     (employee_id, date, clock_in, clock_out, break_duration, total_hours, status) 
-                    VALUES (?, ?, ?, ?, ?, ?, 'pending')";
+                    VALUES (?, ?, ?, ?, ?, ?, 'approved')";
     $insert_stmt = $pdo->prepare($insert_query);
     $insert_stmt->execute([
         $employee_id,
@@ -261,13 +279,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_timesheet'])) 
 // Fetch timesheet data for display
 $search_employee_id = isset($_GET['employee_id']) ? intval($_GET['employee_id']) : null;
 $search_date = isset($_GET['date']) ? $_GET['date'] : null;
+$sort = isset($_GET['sort']) ? $_GET['sort'] : 'date_desc';
 
 // Validate date format if provided
 if ($search_date && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $search_date)) {
     $search_date = null;
 }
 
-$result = getTimesheetData($pdo, $search_employee_id, $search_date);
+// Log sort parameter for debugging
+error_log("Sort parameter received: " . $sort);
+
+$result = getTimesheetData($pdo, $search_employee_id, $search_date, $sort);
 ?>
 
 <!DOCTYPE html>
@@ -296,6 +318,7 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date);
             --transition: all 0.3s ease;
             --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0.3);
             --gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            --reset-gradient: linear-gradient(135deg, #FF6B6B, #FF8E8E);
         }
 
         * {
@@ -571,6 +594,38 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date);
             height: 200px;
         }
 
+        .btn-reset {
+            background: var(--reset-gradient);
+            color: var(--white);
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-reset:hover {
+            background: #FF8E8E;
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-2px);
+        }
+
+        .btn-reset::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s ease, height 0.6s ease;
+        }
+
+        .btn-reset:hover::before {
+            width: 200px;
+            height: 200px;
+        }
+
         .btn-export {
             background: linear-gradient(135deg, #28a745, #34c759);
             color: var(--white);
@@ -616,23 +671,6 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date);
             border-top: 1px solid var(--gray);
         }
 
-        .action-form {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .action-form .form-select {
-            padding: 8px;
-            font-size: 13px;
-            flex-grow: 1;
-        }
-
-        .action-form .btn {
-            padding: 8px 16px;
-            font-size: 13px;
-        }
-
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -665,14 +703,6 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date);
             }
             .form-grid {
                 grid-template-columns: 1fr;
-            }
-            .action-form {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .action-form .form-select,
-            .action-form .btn {
-                width: 100%;
             }
         }
 
@@ -750,11 +780,11 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date);
                 </div>
                 
                 <div class="card-body">
-                    <!-- Display success message if update was successful -->
-                    <?php if (isset($_GET['update']) && $_GET['update'] === 'success'): ?>
+                    <!-- Display success message if submission was successful -->
+                    <?php if (isset($_GET['success']) && $_GET['success'] === '1'): ?>
                         <div class="alert-success" role="alert">
                             <i class="fas fa-check-circle"></i>
-                            Timesheet record updated successfully!
+                            Timesheet record added successfully!
                         </div>
                     <?php endif; ?>
                     
@@ -782,21 +812,34 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date);
                                 <input type="date" id="date" name="date" class="form-control" value="<?php echo htmlspecialchars($search_date); ?>">
                             </div>
                             
-                            <div style="display: flex; align-items: flex-end;">
+                            <div>
+                                <label for="sort" class="form-label">Sort By</label>
+                                <select name="sort" id="sort" class="form-select">
+                                    <option value="date_desc" <?php echo $sort === 'date_desc' ? 'selected' : ''; ?>>Date (Newest First)</option>
+                                    <option value="date_asc" <?php echo $sort === 'date_asc' ? 'selected' : ''; ?>>Date (Oldest First)</option>
+                                    <option value="name_asc" <?php echo $sort === 'name_asc' ? 'selected' : ''; ?>>Name (A-Z)</option>
+                                    <option value="name_desc" <?php echo $sort === 'name_desc' ? 'selected' : ''; ?>>Name (Z-A)</option>
+                                </select>
+                            </div>
+                            
+                            <div style="display: flex; align-items: flex-end; gap: 10px;">
                                 <button type="submit" class="btn btn-primary w-100">
                                     <i class="fas fa-search me-2"></i>Search
                                 </button>
+                                <a href="timesheet.php?sort=date_desc" class="btn btn-reset w-100">
+                                    <i class="fas fa-undo me-2"></i>Reset Filter
+                                </a>
                             </div>
                         </form>
                     </div>
                     
                     <!-- Export Buttons -->
                     <div class="d-flex justify-content-end mb-4 gap-2">
-                        <a href="?export=pdf&employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>"
+                        <a href="?export=pdf&employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>&sort=<?php echo urlencode($sort); ?>"
                            class="btn btn-export">
                             <i class="fas fa-file-pdf me-2"></i>Export as PDF
                         </a>
-                        <a href="?export=excel&employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>"
+                        <a href="?export=excel&employee_id=<?php echo urlencode($search_employee_id); ?>&date=<?php echo urlencode($search_date); ?>&sort=<?php echo urlencode($sort); ?>"
                            class="btn btn-export">
                             <i class="fas fa-file-excel me-2"></i>Export as Excel
                         </a>
@@ -813,8 +856,6 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date);
                                     <th>Clock Out</th>
                                     <th>Break (mins)</th>
                                     <th>Total Hours</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -826,29 +867,12 @@ $result = getTimesheetData($pdo, $search_employee_id, $search_date);
                                             <td><?php echo htmlspecialchars($row['clock_in']); ?></td>
                                             <td><?php echo htmlspecialchars($row['clock_out']); ?></td>
                                             <td><?php echo htmlspecialchars($row['break_duration']); ?></td>
-                                            <td><?php echo htmlspecialchars($row['total_hours']); ?></td>
-                                            <td><?php echo htmlspecialchars(ucfirst($row['status'])); ?></td>
-                                            <td>
-                                                <form action="timesheet.php" method="POST" class="action-form">
-                                                    <input type="hidden" name="timesheet_id" value="<?php echo $row['id']; ?>">
-                                                    <input type="hidden" name="employee_id" value="<?php echo $search_employee_id; ?>">
-                                                    <input type="hidden" name="date" value="<?php echo $search_date; ?>">
-                                                    <select name="status" class="form-select" required>
-                                                        <option value="">Select Status</option>
-                                                        <option value="approved" <?php echo $row['status'] === 'approved' ? 'selected' : ''; ?>>Approved</option>
-                                                        <option value="rejected" <?php echo $row['status'] === 'rejected' ? 'selected' : ''; ?>>Rejected</option>
-                                                        <option value="pending" <?php echo $row['status'] === 'pending' ? 'selected' : ''; ?>>Pending Review</option>
-                                                    </select>
-                                                    <button type="submit" class="btn btn-primary" title="Update Status">
-                                                        <i class="fas fa-save"></i> Update
-                                                    </button>
-                                                </form>
-                                            </td>
+                                            <td><?php echo htmlspecialchars(formatTotalHours($row['total_hours'])); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="8" class="text-center py-4">No timesheet records found</td>
+                                        <td colspan="6" class="text-center py-4">No timesheet records found</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>

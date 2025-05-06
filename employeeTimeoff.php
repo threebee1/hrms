@@ -48,7 +48,7 @@ try {
     $stmt->execute([$user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    error_log("User query failed: " . $e->getMessage());
+    error_log("User query failed for user_id $user_id: " . $e->getMessage());
     die('Internal server error');
 }
 
@@ -64,11 +64,10 @@ try {
     $stmt->execute([$user_id]);
     $unreadMessages = $stmt->fetch(PDO::FETCH_ASSOC)['unread'];
 } catch (PDOException $e) {
-    error_log("Unread messages query failed: " . $e->getMessage());
+    error_log("Unread messages query failed for user_id $user_id: " . $e->getMessage());
     $unreadMessages = 0;
 }
 
-// Function to calculate time off balance
 // Function to calculate time off balance
 function getTimeOffBalance($pdo, $employee_id, $year = null) {
     $year = $year ?: date('Y');
@@ -112,11 +111,15 @@ function getTimeOffBalance($pdo, $employee_id, $year = null) {
 
 // Function to calculate business days
 function getBusinessDays($start_date, $end_date) {
-    $start = new DateTime($start_date);
-    $end = new DateTime($end_date);
-    $end->modify('+1 day');
-    $periods = new DatePeriod($start, new DateInterval('P1D'), $end);
-    return iterator_count(array_filter(iterator_to_array($periods), fn($date) => $date->format('N') < 6));
+    try {
+        $start = new DateTime($start_date);
+        $end = new DateTime($end_date);
+        $end->modify('+1 day');
+        $periods = new DatePeriod($start, new DateInterval('P1D'), $end);
+        return iterator_count(array_filter(iterator_to_array($periods), fn($date) => $date->format('N') < 6));
+    } catch (Exception $e) {
+        return 0; // Return 0 if date parsing fails
+    }
 }
 
 // Handle time off request submission
@@ -153,15 +156,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                 } else {
                     // Insert new time off request
                     $stmt = $pdo->prepare("
-                        INSERT INTO time_off_requests (employee_id, leave_type, start_date, end_date, notes, status)
-                        VALUES (?, ?, ?, ?, ?, 'pending')
+                        INSERT INTO time_off_requests (employee_id, leave_type, start_date, end_date, notes, status, created_at)
+                        VALUES (?, ?, ?, ?, ?, 'pending', NOW())
                     ");
                     $stmt->execute([$user_id, $leave_type, $start_date, $end_date, $notes]);
                     $success_message = "Time off request submitted successfully!";
                 }
             }
         } catch (Exception $e) {
-            error_log("Time off request failed: " . $e->getMessage());
+            error_log("Time off request failed for user_id $user_id: " . $e->getMessage());
             $error_message = "Error submitting request. Please try again.";
         }
     }
@@ -177,14 +180,32 @@ try {
         ORDER BY created_at DESC
     ");
     $stmt->execute([$user_id]);
-    $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $raw_requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    foreach ($requests as &$row) {
-        $row['business_days'] = getBusinessDays($row['start_date'], $row['end_date']);
-        $row['total_days'] = (new DateTime($row['end_date']))->diff(new DateTime($row['start_date']))->days + 1;
+    // Filter out invalid rows and calculate additional fields
+    foreach ($raw_requests as $row) {
+        if (is_array($row) && !empty($row['id'])) {
+            // Skip rows with null or invalid dates
+            if (empty($row['start_date']) || empty($row['end_date']) || empty($row['created_at'])) {
+                error_log("Skipping invalid time off request for user_id $user_id: " . json_encode($row));
+                continue;
+            }
+            $row['business_days'] = getBusinessDays($row['start_date'], $row['end_date']);
+            try {
+                $row['total_days'] = (new DateTime($row['end_date']))->diff(new DateTime($row['start_date']))->days + 1;
+            } catch (Exception $e) {
+                error_log("Date parsing failed for request ID {$row['id']}: " . $e->getMessage());
+                continue;
+            }
+            $requests[] = $row;
+        } else {
+            error_log("Invalid row in time off requests for user_id $user_id: " . json_encode($row));
+        }
     }
+    error_log("Fetched time off requests for user_id $user_id: " . json_encode($requests));
 } catch (PDOException $e) {
-    error_log("Time off requests query failed: " . $e->getMessage());
+    error_log("Time off requests query failed for user_id $user_id: " . $e->getMessage());
+    $requests = [];
 }
 
 // Fetch calendar data for approved requests
@@ -199,6 +220,9 @@ try {
     $stmt->execute([$user_id, $current_month, $current_month]);
     $calendar_data = [];
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        if (empty($row['start_date']) || empty($row['end_date'])) {
+            continue;
+        }
         $start = new DateTime($row['start_date']);
         $end = new DateTime($row['end_date']);
         $end->modify('+1 day');
@@ -208,7 +232,7 @@ try {
         }
     }
 } catch (PDOException $e) {
-    error_log("Calendar data query failed: " . $e->getMessage());
+    error_log("Calendar data query failed for user_id $user_id: " . $e->getMessage());
     $calendar_data = [];
 }
 
@@ -401,7 +425,7 @@ $balance = getTimeOffBalance($pdo, $user_id);
         .header-info {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 2px;
         }
 
         .current-time {
@@ -976,12 +1000,18 @@ $balance = getTimeOffBalance($pdo, $user_id);
                                 <?php if (count($requests) > 0): ?>
                                     <?php foreach ($requests as $row): ?>
                                         <tr>
-                                            <td><span class="badge <?php echo $row['leave_type']; ?>-badge"><?php echo ucfirst($row['leave_type']); ?></span></td>
-                                            <td><?php echo date('M d, Y', strtotime($row['start_date'])); ?> - <?php echo date('M d, Y', strtotime($row['end_date'])); ?></td>
-                                            <td><?php echo $row['business_days']; ?> business days</td>
+                                            <td><span class="badge <?php echo htmlspecialchars($row['leave_type'] ?? 'other'); ?>-badge"><?php echo ucfirst(htmlspecialchars($row['leave_type'] ?? 'Unknown')); ?></span></td>
+                                            <td>
+                                                <?php 
+                                                $start_date = !empty($row['start_date']) && strtotime($row['start_date']) ? date('M d, Y', strtotime($row['start_date'])) : 'N/A';
+                                                $end_date = !empty($row['end_date']) && strtotime($row['end_date']) ? date('M d, Y', strtotime($row['end_date'])) : 'N/A';
+                                                echo "$start_date - $end_date";
+                                                ?>
+                                            </td>
+                                            <td><?php echo (isset($row['business_days']) ? $row['business_days'] : '0'); ?> business days</td>
                                             <td><?php echo htmlspecialchars($row['notes'] ?: 'N/A'); ?></td>
-                                            <td><span class="badge <?php echo $row['status']; ?>-badge"><?php echo ucfirst($row['status']); ?></span></td>
-                                            <td><?php echo date('M d, Y', strtotime($row['created_at'])); ?></td>
+                                            <td><span class="badge <?php echo htmlspecialchars($row['status'] ?? 'pending'); ?>-badge"><?php echo ucfirst(htmlspecialchars($row['status'] ?? 'Unknown')); ?></span></td>
+                                            <td><?php echo !empty($row['created_at']) && strtotime($row['created_at']) ? date('M d, Y', strtotime($row['created_at'])) : 'N/A'; ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>

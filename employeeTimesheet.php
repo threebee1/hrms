@@ -19,6 +19,7 @@ $dbpass = getenv('DB_PASS') ?: '';
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname", $dbuser, $dbpass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $pdo->exec("SET time_zone = '+08:00'");
 } catch (PDOException $e) {
     error_log("Database connection failed: " . $e->getMessage());
     die('Internal server error: Database connection failed.');
@@ -85,111 +86,105 @@ try {
     $unreadMessages = 0;
 }
 
+// Set timezone explicitly
+date_default_timezone_set('Asia/Manila');
+
+// Function to format total_hours as HH:MM
+function formatTotalHours($total_hours) {
+    if (!isset($total_hours) || $total_hours === null) {
+        return 'N/A';
+    }
+    $hours = floor($total_hours);
+    $minutes = round(($total_hours - $hours) * 60);
+    return sprintf("%02d:%02d", $hours, $minutes);
+}
+
 // Handle timesheet submission
 $error_message = '';
 $success_message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_POST['csrf_token'] === $_SESSION['csrf_token']) {
     $action = $_POST['action'] ?? '';
-    $date = trim($_POST['date'] ?? '');
-    $clock_in = trim($_POST['clock_in'] ?? '');
-    $clock_out = trim($_POST['clock_out'] ?? '');
-    $break_duration = trim($_POST['break_duration'] ?? '');
+    $date = date('Y-m-d'); // Always use current date
+    $current_time = date('H:i'); // Current time in HH:MM format
 
-    error_log("POST received: action=$action, date=$date, clock_in=$clock_in, clock_out=$clock_out, break_duration=$break_duration, user_id=$user_id");
+    error_log("POST received: action=$action, date=$date, current_time=$current_time, user_id=$user_id, server_time=" . date('Y-m-d H:i:s'));
 
-    // Validate inputs
-    if (empty($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-        $error_message = "Please select a valid date.";
-        error_log("Validation failed: Invalid date format: $date");
-    } elseif ($action === 'clock_in') {
-        // Validate clock-in time format (HH:MM)
-        if (empty($clock_in) || !preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $clock_in)) {
-            $error_message = "Please enter a valid clock-in time (e.g., 09:00).";
-            error_log("Validation failed: Invalid clock-in time: $clock_in");
-        } else {
-            try {
-                $pdo->beginTransaction();
+    if ($action === 'clock_in') {
+        try {
+            $pdo->beginTransaction();
 
-                // Check if a timesheet entry already exists for the date
-                $stmt = $pdo->prepare("SELECT id FROM timesheets WHERE employee_id = ? AND date = ?");
-                $stmt->execute([$user_id, $date]);
-                if ($stmt->fetch()) {
-                    $error_message = "A timesheet entry already exists for this date.";
-                    error_log("Duplicate timesheet entry for user_id: $user_id, date: $date");
-                } else {
-                    // Insert new timesheet entry
-                    $stmt = $pdo->prepare("
-                        INSERT INTO timesheets (employee_id, date, clock_in, status)
-                        VALUES (?, ?, ?, 'pending')
-                    ");
-                    $stmt->execute([$user_id, $date, $clock_in]);
-                    error_log("Clock-in recorded successfully for user_id: $user_id, date: $date, clock_in: $clock_in");
-                    $success_message = "Clock-in recorded successfully!";
-                }
-
-                $pdo->commit();
-            } catch (Exception $e) {
-                $pdo->rollBack();
-                error_log("Timesheet clock-in failed: " . $e->getMessage());
-                $error_message = "Error recording clock-in. Please try again.";
+            // Check if a timesheet entry already exists for the date
+            $stmt = $pdo->prepare("SELECT id FROM timesheets WHERE employee_id = ? AND date = ?");
+            $stmt->execute([$user_id, $date]);
+            if ($stmt->fetch()) {
+                $error_message = "A timesheet entry already exists for today.";
+                error_log("Duplicate timesheet entry for user_id: $user_id, date: $date");
+            } else {
+                // Insert new timesheet entry
+                $stmt = $pdo->prepare("
+                    INSERT INTO timesheets (employee_id, date, clock_in, status)
+                    VALUES (?, ?, ?, 'approved')
+                ");
+                $stmt->execute([$user_id, $date, $current_time]);
+                error_log("Clock-in recorded successfully for user_id: $user_id, date: $date, clock_in: $current_time");
+                $success_message = "Clock-in recorded successfully at $current_time!";
             }
+
+            $pdo->commit();
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            error_log("Timesheet clock-in failed: " . $e->getMessage());
+            $error_message = "Error recording clock-in. Please try again.";
         }
     } elseif ($action === 'clock_out') {
-        // Validate clock-out inputs
-        if (empty($clock_out) || !preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $clock_out)) {
-            $error_message = "Please enter a valid clock-out time (e.g., 17:00).";
-            error_log("Validation failed: Invalid clock-out time: $clock_out");
-        } elseif (empty($break_duration) || !is_numeric($break_duration) || $break_duration < 0) {
-            $error_message = "Please enter a valid break duration (minutes).";
-            error_log("Validation failed: Invalid break duration: $break_duration");
-        } else {
-            try {
-                $pdo->beginTransaction();
+        try {
+            $pdo->beginTransaction();
 
-                // Update existing timesheet entry
-                $stmt = $pdo->prepare("
-                    SELECT id, clock_in FROM timesheets WHERE employee_id = ? AND date = ? AND clock_out IS NULL
-                ");
-                $stmt->execute([$user_id, $date]);
-                $timesheet = $stmt->fetch(PDO::FETCH_ASSOC);
+            // Update existing timesheet entry
+            $stmt = $pdo->prepare("
+                SELECT id, clock_in FROM timesheets WHERE employee_id = ? AND date = ? AND clock_out IS NULL
+            ");
+            $stmt->execute([$user_id, $date]);
+            $timesheet = $stmt->fetch(PDO::FETCH_ASSOC);
 
-                if (!$timesheet) {
-                    $error_message = "No open timesheet found for this date. Please clock in first.";
-                    error_log("No open timesheet for user_id: $user_id, date: $date");
+            if (!$timesheet) {
+                $error_message = "No open timesheet found for today. Please clock in first.";
+                error_log("No open timesheet for user_id: $user_id, date: $date");
+            } else {
+                // Calculate total hours
+                $clock_in_time = new DateTime($timesheet['clock_in']);
+                $clock_out_time = new DateTime($current_time);
+                if ($clock_out_time <= $clock_in_time) {
+                    $error_message = "Clock-out time must be after clock-in time.";
+                    error_log("Invalid clock-out time: $current_time is not after clock-in time: {$timesheet['clock_in']}");
                 } else {
-                    // Calculate total hours
-                    $clock_in_time = new DateTime($timesheet['clock_in']);
-                    $clock_out_time = new DateTime($clock_out);
-                    if ($clock_out_time <= $clock_in_time) {
-                        $error_message = "Clock-out time must be after clock-in time.";
-                        error_log("Invalid clock-out time: $clock_out is not after clock-in time: {$timesheet['clock_in']}");
-                    } else {
-                        $interval = $clock_in_time->diff($clock_out_time);
-                        $total_hours = $interval->h + ($interval->i / 60) - ($break_duration / 60);
+                    $interval = $clock_in_time->diff($clock_out_time);
+                    $total_minutes = ($interval->h * 60) + $interval->i;
+                    $break_duration = $total_minutes < 60 ? 0 : 60; // No break if less than 60 minutes
+                    $total_hours = ($total_minutes - $break_duration) / 60;
 
-                        if ($total_hours <= 0) {
-                            $error_message = "Invalid timesheet: Total hours must be positive.";
-                            error_log("Invalid total hours: $total_hours for user_id: $user_id, date: $date");
-                        } else {
-                            $stmt = $pdo->prepare("
-                                UPDATE timesheets 
-                                SET clock_out = ?, break_duration = ?, total_hours = ?, status = 'pending'
-                                WHERE id = ?
-                            ");
-                            $stmt->execute([$clock_out, $break_duration, $total_hours, $timesheet['id']]);
-                            error_log("Clock-out recorded successfully for user_id: $user_id, date: $date, total_hours: $total_hours");
-                            $success_message = "Clock-out recorded successfully!";
-                        }
+                    if ($total_hours < 0) {
+                        $error_message = "Invalid timesheet: Total hours cannot be negative.";
+                        error_log("Negative total hours: $total_hours for user_id: $user_id, date: $date");
+                    } else {
+                        $stmt = $pdo->prepare("
+                            UPDATE timesheets 
+                            SET clock_out = ?, break_duration = ?, total_hours = ?, status = 'approved'
+                            WHERE id = ?
+                        ");
+                        $stmt->execute([$current_time, $break_duration, $total_hours, $timesheet['id']]);
+                        error_log("Clock-out recorded successfully for user_id: $user_id, date: $date, total_hours: $total_hours, break_duration: $break_duration");
+                        $success_message = "Clock-out recorded successfully at $current_time!";
                     }
                 }
-
-                $pdo->commit();
-            } catch (Exception $e) {
-                $pdo->rollBack();
-                error_log("Timesheet clock-out failed: " . $e->getMessage());
-                $error_message = "Error recording clock-out. Please try again.";
             }
+
+            $pdo->commit();
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            error_log("Timesheet clock-out failed: " . $e->getMessage());
+            $error_message = "Error recording clock-out. Please try again.";
         }
     }
 }
@@ -223,7 +218,6 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Timesheet | HRPro</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
     <style>
         :root {
             --primary: #4B3F72;
@@ -504,31 +498,6 @@ try {
             flex-direction: column;
         }
 
-        .form-label {
-            font-size: 14px;
-            color: var(--text);
-            font-weight: 600;
-            margin-bottom: 8px;
-        }
-
-        .form-control {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid var(--gray);
-            border-radius: var(--border-radius);
-            font-size: 14px;
-            background: var(--white);
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
-            transition: var(--transition);
-        }
-
-        .form-control:focus {
-            outline: none;
-            border-color: var(--secondary);
-            box-shadow: var(--focus-ring), inset 0 2px 4px rgba(0, 0, 0, 0.05);
-            background: var(--white);
-        }
-
         .btn {
             padding: 14px 24px;
             border-radius: var(--border-radius);
@@ -603,7 +572,7 @@ try {
 
         .table td {
             padding: 12px;
- confront-align: middle;
+            vertical-align: middle;
             border-top: 1px solid var(--gray);
         }
 
@@ -709,7 +678,7 @@ try {
         <header class="header">
             <div class="header-title">
                 <h1>Timesheet</h1>
-                <p>Log and view your work hours</p>
+                <p>Log your work hours</p>
             </div>
             <div class="header-info">
                 <div class="current-time" id="currentTime">
@@ -760,22 +729,7 @@ try {
                     <!-- Timesheet Form -->
                     <form action="Employeetimesheet.php" method="POST" class="form-grid">
                         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
-                        <div class="form-group">
-                            <label for="date" class="form-label">Date</label>
-                            <input type="text" class="form-control flatpickr-input" id="date" name="date" value="<?php echo htmlspecialchars($search_date ?: date('Y-m-d')); ?>" required aria-required="true">
-                        </div>
-                        <div class="form-group">
-                            <label for="clock_in" class="form-label">Clock In</label>
-                            <input type="time" class="form-control" id="clock_in" name="clock_in" aria-required="true">
-                        </div>
-                        <div class="form-group">
-                            <label for="clock_out" class="form-label">Clock Out</label>
-                            <input type="time" class="form-control" id="clock_out" name="clock_out">
-                        </div>
-                        <div class="form-group">
-                            <label for="break_duration" class="form-label">Break Duration (minutes)</label>
-                            <input type="number" class="form-control" id="break_duration" name="break_duration" min="0" step="1">
-                        </div>
+                        <input type="hidden" name="date" value="<?php echo date('Y-m-d'); ?>">
                         <div class="form-group" style="display: flex; align-items: flex-end; gap: 10px;">
                             <button type="submit" name="action" value="clock_in" class="btn btn-primary">
                                 <i class="fas fa-sign-in-alt me-2"></i>Clock In
@@ -807,7 +761,7 @@ try {
                                             <td><?php echo htmlspecialchars($row['clock_in'] ?: 'N/A'); ?></td>
                                             <td><?php echo htmlspecialchars($row['clock_out'] ?: 'N/A'); ?></td>
                                             <td><?php echo htmlspecialchars($row['break_duration'] ?: '0'); ?></td>
-                                            <td><?php echo htmlspecialchars($row['total_hours'] ? number_format($row['total_hours'], 2) : 'N/A'); ?></td>
+                                            <td><?php echo htmlspecialchars(formatTotalHours($row['total_hours'])); ?></td>
                                             <td><?php echo htmlspecialchars(ucfirst($row['status'])); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -825,7 +779,6 @@ try {
     </main>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script>
         // Sidebar Toggle
         document.getElementById('sidebarToggle').addEventListener('click', function() {
@@ -848,16 +801,6 @@ try {
         }
         setInterval(updateTime, 1000);
         updateTime();
-
-        // Flatpickr for Date
-        flatpickr('#date', {
-            dateFormat: 'Y-m-d',
-            maxDate: 'today',
-            onOpen: function() {
-                document.querySelector('.flatpickr-calendar').setAttribute('role', 'dialog');
-                document.querySelector('.flatpickr-calendar').setAttribute('aria-label', 'Date picker');
-            }
-        });
 
         // Auto-dismiss Notifications
         document.querySelectorAll('.alert-success, .alert-error').forEach(alert => {

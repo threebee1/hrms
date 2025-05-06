@@ -224,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personal Information | HRPro</title>
+    <title>Personal Information | HRMS</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
     <style>
@@ -240,13 +240,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             --text: #2D2A4A;
             --text-light: #A0A0B2;
             --gray: #E5E5E5;
-            --border-radius: 12px;
-            --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.15);
-            --transition: all 0.3s ease;
-            --focus-ring: 0 0 0 3px rgba(191, 162, 219, 0ζ
-            .3);
-            --gradient: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            --border-radius: 16px;
+            --shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --focus-ring: 0 0 0 4px rgba(191, 162, 219, 0.2);
+            --gradient: linear-gradient(145deg, var(--primary) 0%, var(--primary-dark) 100%);
         }
 
         * {
@@ -259,112 +258,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         body {
             display: flex;
             min-height: 100vh;
-            background: linear-gradient(135deg, var(--light) 0%, var(--white) 100%);
+            background: linear-gradient(145deg, var(--white) 0%, var(--light) 100%);
             color: var(--text);
             line-height: 1.6;
         }
 
         /* Sidebar Styles */
         .sidebar {
-            width: 260px;
+            width: 280px;
             background: var(--gradient);
             color: var(--white);
             box-shadow: var(--shadow);
             transition: var(--transition);
-            position: sticky;
+            position: fixed;
             top: 0;
+            left: 0;
             height: 100vh;
             overflow-y: auto;
+            z-index: 1000;
+            transform: translateX(0);
         }
 
         .sidebar.collapsed {
-            width: 80px;
-        }
-
-        .sidebar.collapsed .logo-text,
-        .sidebar.collapsed .menu-text,
-        .sidebar.collapsed .menu-badge {
-            display: none;
-        }
-
-        .sidebar.collapsed .menu-item {
-            justify-content: center;
+            transform: translateX(-100%);
         }
 
         .sidebar-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
         }
 
         .logo {
             display: flex;
             align-items: center;
+            gap: 12px;
         }
 
         .logo-icon {
-            font-size: 24px;
+            font-size: 28px;
             color: var(--secondary);
-            margin-right: 10px;
         }
 
         .logo-text {
             font-family: 'Poppins', sans-serif;
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
         }
 
         .toggle-btn {
             background: none;
             border: none;
-            font-size: 16px;
+            font-size: 18px;
             color: var(--secondary);
             cursor: pointer;
-            padding: 5px;
+            padding: 8px;
+            border-radius: 8px;
             transition: var(--transition);
         }
 
         .toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
             color: var(--white);
-            transform: scale(1.1);
         }
 
         .sidebar-menu {
-            padding: 15px 0;
+            padding: 20px 0;
         }
 
         .menu-item {
             display: flex;
             align-items: center;
-            padding: 12px 20px;
+            padding: 14px 24px;
             color: var(--white);
             text-decoration: none;
             transition: var(--transition);
+            border-left: 4px solid transparent;
+            position: relative;
+            overflow: hidden;
         }
 
         .menu-item:hover {
-            background-color: var(--primary-light);
+            background: rgba(255, 255, 255, 0.1);
+            border-left-color: var(--secondary);
             transform: translateX(5px);
         }
 
         .menu-item.active {
-            background-color: var(--primary-light);
-            border-left: 4px solid var(--secondary);
+            background: rgba(255, 255, 255, 0.15);
+            border-left-color: var(--secondary);
         }
 
         .menu-item i {
-            margin-right: 12px;
-            font-size: 18px;
+            margin-right: 14px;
+            font-size: 20px;
+        }
+
+        .menu-text {
+            font-size: 16px;
+            font-weight: 500;
         }
 
         .menu-badge {
+            margin-left: auto;
             background: var(--error);
             color: var(--white);
-            border-radius: 50%;
-            padding: 2px 8px;
-            margin-left: auto;
+            border-radius: 12px;
+            padding: 4px 10px;
             font-size: 12px;
             font-weight: 600;
         }
@@ -372,9 +375,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         /* Main Content Styles */
         .main-content {
             flex: 1;
-            overflow-y: auto;
-            padding-bottom: 60px;
-            background-color: var(--white);
+            margin-left: 280px;
+            padding: 30px;
+            background: var(--white);
+            transition: var(--transition);
         }
 
         /* Header Styles */
@@ -382,62 +386,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 30px;
-            background: var(--white);
+            padding: 15px 20px;
+            background: linear-gradient(145deg, var(--white) 0%, var(--light) 100%);
             box-shadow: var(--shadow);
+            border-radius: var(--border-radius);
             position: sticky;
             top: 0;
             z-index: 10;
         }
 
+        .hamburger-menu {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: var(--primary);
+            cursor: pointer;
+            padding: 6px;
+        }
+
         .header-title h1 {
             font-family: 'Poppins', sans-serif;
-            font-size: 28px;
+            font-size: 24px;
             color: var(--primary);
-            margin-bottom: 5px;
+            font-weight: 700;
+            margin-bottom: 4px;
         }
 
         .header-title p {
             font-size: 14px;
             color: var(--text-light);
+            font-weight: 400;
         }
 
         .header-info {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 16px;
         }
 
         .current-time {
             font-size: 14px;
             color: var(--text-light);
+            font-weight: 500;
         }
 
         .user-profile {
             display: flex;
             align-items: center;
+            gap: 10px;
         }
 
         .user-avatar {
-            width: 44px;
-            height: 44px;
-            background: var(--gradient);
+            width: 40px;
+            height: 40px;
+            background: var(--primary);
             color: var(--white);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-right: 10px;
             font-weight: 600;
             font-size: 16px;
             box-shadow: var(--shadow);
+        }
+
+        .user-profile span {
+            font-size: 14px;
+            font-weight: 500;
         }
 
         /* Content Styles */
         .content {
             max-width: 1200px;
             margin: 40px auto;
-            padding: 0 30px;
+            padding: 0 20px;
         }
 
         .personal-section {
@@ -573,7 +596,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         }
 
         .btn-primary {
-            background: var(--gradient);
+            background: var(--primary);
             color: var(--white);
             border: none;
             box-shadow: var(--shadow);
@@ -644,14 +667,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .password-field {
             position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto 16px;
         }
 
         .password-field .form-control {
-            padding-right: 40px;
+            padding: 12px 40px 12px 12px;
             border: 2px solid var(--gray);
+            border-radius: var(--border-radius);
             background: var(--white);
             box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
             transition: var(--transition);
+            font-size: 14px;
+            width: 100%;
         }
 
         .password-field .form-control:focus {
@@ -686,13 +715,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             font-size: 12px;
             color: var(--text-light);
             margin-top: 5px;
+            text-align: center;
         }
 
-        .password-section .form-group {
+        .password-section .form-group.checkbox-group {
             display: flex;
             flex-direction: row;
             align-items: center;
             gap: 10px;
+            margin-bottom: 20px;
         }
 
         .password-section input[type="checkbox"] {
@@ -707,6 +738,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .password-section .form-label {
             margin-bottom: 0;
             cursor: pointer;
+        }
+
+        .password-section .password-fields-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 500px;
+            margin: 0 auto;
         }
 
         .flatpickr-calendar {
@@ -749,7 +788,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         .flatpickr-day.endRange {
             background: var(--primary);
             color: var(--white);
-            border-color: var(--primary);
+            border: none;
         }
 
         .flatpickr-day.today {
@@ -804,19 +843,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
             bottom: 30px;
             right: 30px;
             background: var(--white);
-            padding: 20px 25px;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
+            padding: 16px 24px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-hover);
             display: flex;
             align-items: center;
             z-index: 1000;
-            animation: slideIn 0.5s ease-out;
-            border-left: 4px solid var(--primary);
+            animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            border-left: 5px solid var(--primary);
             min-width: 300px;
         }
 
         @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
+            from { transform: translateX(120%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
 
@@ -832,9 +871,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         }
 
         .update-notification span {
-            margin-right: 15px;
-            font-size: 14px;
-            flex: 1;
+            margin-right: 20px;
+            font-size: 15px;
+            font-weight: 500;
         }
 
         .close-notification {
@@ -848,9 +887,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
 
         .close-notification:hover {
             color: var(--primary);
-            transform: scale(1.1);
+            transform: scale(1.2);
         }
 
+        /* Responsive Styles */
         @media (max-width: 1400px) {
             .profile-info-container {
                 grid-template-columns: 1fr;
@@ -867,8 +907,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         }
 
         @media (max-width: 992px) {
+            .main-content {
+                margin-left: 0;
+            }
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .hamburger-menu {
+                display: block;
+            }
             .content {
-                padding: 0 20px;
+                padding: 0 15px;
                 margin: 20px auto;
             }
             .personal-section {
@@ -877,34 +929,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         }
 
         @media (max-width: 768px) {
-            .sidebar {
-                position: fixed;
-                left: 0;
-                top: 0;
-                bottom: 0;
-                transform: translateX(0);
-                z-index: 1000;
-            }
-            .sidebar.collapsed {
-                transform: translateX(-100%);
-            }
-            .main-content {
-                margin-left: 0;
-            }
             .header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-                padding: 15px;
+                flex-direction: row;
+                align-items: center;
+                padding: 10px 15px;
+                gap: 10px;
+            }
+            .header-title h1 {
+                font-size: 20px;
+                margin-bottom: 2px;
+            }
+            .header-title p {
+                font-size: 12px;
             }
             .header-info {
-                width: 100%;
-                justify-content: space-between;
+                gap: 12px;
+            }
+            .current-time {
+                font-size: 12px;
+            }
+            .user-avatar {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+            .user-profile span {
+                font-size: 12px;
+            }
+            .hamburger-menu {
+                font-size: 18px;
+                padding: 4px;
             }
             .section-header {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 10px;
+            }
+            .password-field {
+                max-width: 100%;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .header {
+                padding: 8px 12px;
+            }
+            .header-title h1 {
+                font-size: 18px;
+            }
+            .header-title p {
+                font-size: 11px;
+            }
+            .section-title {
+                font-size: 18px;
+            }
+            .btn {
+                padding: 8px 14px;
+                font-size: 13px;
+            }
+            .user-profile span {
+                display: none;
+            }
+            .header-info {
+                gap: 8px;
+            }
+            .current-time {
+                font-size: 11px;
             }
         }
 
@@ -922,11 +1012,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
         <div class="sidebar-header">
             <div class="logo">
                 <i class="fas fa-user-tie logo-icon"></i>
-                <h1 class="logo-text">Employee</h1>
+                <h1 class="logo-text">HRMS</h1>
             </div>
-            <button class="toggle-btn" id="sidebarToggle">
-                <i class="fas fa-chevron-left"></i>
-            </button>
         </div>
         <nav class="sidebar-menu">
             <a href="Employeedashboard.php" class="menu-item">
@@ -952,6 +1039,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                     <span class="menu-badge"><?php echo htmlspecialchars($unreadMessages); ?></span>
                 <?php endif; ?>
             </a>
+            <a href="employeeView.php" class="menu-item">
+    <i class="fas fa-chart-line"></i>
+    <span class="menu-text">Performance</span>
+</a>
+
             <a href="login.html" class="menu-item">
                 <i class="fas fa-sign-out-alt"></i>
                 <span class="menu-text">Logout</span>
@@ -963,24 +1055,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
     <main class="main-content">
         <!-- Header -->
         <header class="header">
+            <button class="hamburger-menu" id="hamburgerMenu">
+                <i class="fas fa-bars"></i>
+            </button>
             <div class="header-title">
                 <h1>Personal Information</h1>
                 <p>Update your personal and account details</p>
             </div>
             <div class="header-info">
-                <div class="current-time" id="currentTime">
-                    <?php 
-                    date_default_timezone_set('Asia/Manila');
-                    echo date('l, F j, Y g:i A'); 
-                    ?>
-                </div>
+                <div class="current-time" id="currentTime"></div>
                 <div class="user-profile">
-                    <div class="user-avatar">
-                        <?php 
-                        $initials = substr($user['username'], 0, 2) ?: 'UK';
-                        echo htmlspecialchars($initials);
-                        ?>
-                    </div>
+                    <div class="user-avatar"><?php echo strtoupper(substr($user['first_name'] ?? $user['username'], 0, 1)); ?></div>
                     <span><?php echo htmlspecialchars($user['username'] . ' - ' . ucfirst($user['role'])); ?></span>
                 </div>
             </div>
@@ -1052,12 +1137,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                             <textarea class="form-control" id="address" name="address" rows="4" required aria-required="true"><?php echo htmlspecialchars($user['address']); ?></textarea>
                         </div>
                         <div class="password-section">
-                            <div class="form-group">
+                            <div class="form-group checkbox-group">
                                 <input type="checkbox" id="changePassword" aria-controls="passwordFields">
                                 <label for="changePassword" class="form-label">Change Password</label>
                             </div>
                             <div id="passwordFields" style="display: none;">
-                                <div class="form-grid">
+                                <div class="password-fields-container">
                                     <div class="form-group password-field">
                                         <label for="old_password" class="form-label">Current Password</label>
                                         <input type="password" class="form-control" id="old_password" name="old_password" aria-describedby="old_password_help">
@@ -1065,7 +1150,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
                                             <i class="fas fa-eye"></i>
                                         </button>
                                     </div>
-                                    <div class="form-group"></div>
                                     <div class="form-group password-field">
                                         <label for="password" class="form-label">New Password</label>
                                         <input type="password" class="form-control" id="password" name="password" aria-describedby="password_help">
@@ -1101,27 +1185,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csrf_token']) && $_PO
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script>
-        // Sidebar Toggle
-        document.getElementById('sidebarToggle').addEventListener('click', function() {
-            document.querySelector('.sidebar').classList.toggle('collapsed');
-        });
-
-        // Current Time Update
+        // Update current time
         function updateTime() {
             const timeElement = document.getElementById('currentTime');
-            const now = new Date();
-            timeElement.textContent = now.toLocaleString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-                hour: 'numeric',
-                minute: 'numeric',
-                hour12: true
-            });
+            if (timeElement) {
+                const now = new Date();
+                timeElement.textContent = now.toLocaleString('en-US', {
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    hour12: true
+                });
+            }
         }
         setInterval(updateTime, 1000);
         updateTime();
+
+        // Sidebar toggle
+        const sidebar = document.querySelector('.sidebar');
+        const hamburgerMenu = document.getElementById('hamburgerMenu');
+
+        hamburgerMenu?.addEventListener('click', () => {
+            sidebar.classList.toggle('active');
+        });
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 992 && sidebar.classList.contains('active')) {
+                if (!sidebar.contains(e.target) && !hamburgerMenu.contains(e.target)) {
+                    sidebar.classList.remove('active');
+                }
+            }
+        });
+
+        // Close sidebar on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && window.innerWidth <= 992) {
+                sidebar.classList.remove('active');
+            }
+        });
 
         // Password Toggle
         function togglePassword(fieldId, button) {

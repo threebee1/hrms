@@ -477,31 +477,15 @@ $philippineHolidays = [
 
     .announcement-banner {
         grid-column: 1 / -1;
-        background: linear-gradient(135deg, var(--primary-light) 0%, var(--secondary) 100%);
+        background-color: var(--light);
         border-radius: var(--border-radius);
-        padding: 24px;
+        padding: 20px;
         display: flex;
         align-items: center;
         box-shadow: var(--shadow);
         transition: var(--transition);
         cursor: pointer;
         position: relative;
-        animation: fadeIn 0.5s ease-in;
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .announcement-banner.important, .announcement-banner.critical {
-        animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-        0% { box-shadow: var(--shadow); }
-        50% { box-shadow: 0 8px 24px rgba(191, 162, 219, 0.3); }
-        100% { box-shadow: var(--shadow); }
     }
 
     .announcement-banner:hover {
@@ -510,10 +494,9 @@ $philippineHolidays = [
     }
 
     .announcement-icon {
-        font-size: 28px;
-        color: var(--white);
-        margin-right: 20px;
-        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+        font-size: 24px;
+        color: var(--primary);
+        margin-right: 15px;
     }
 
     .announcement-text {
@@ -522,87 +505,63 @@ $philippineHolidays = [
 
     .announcement-text h3 {
         font-family: 'Poppins', sans-serif;
-        font-size: 20px;
-        color: var(--white);
-        margin-bottom: 8px;
-        font-weight: 600;
+        font-size: 18px;
+        color: var(--text);
+        margin-bottom: 5px;
     }
 
     .announcement-text p {
-        font-size: 16px;
-        color: var(--white);
-        max-width: 90%;
-        line-height: 1.8;
-        opacity: 0.9;
+        font-size: 14px;
+        color: var(--text-light);
+        max-width: 80%;
     }
 
     .announcement-tag {
-        font-size: 13px;
-        padding: 6px 12px;
+        font-size: 12px;
+        padding: 4px 8px;
         border-radius: var(--border-radius);
         margin-left: 10px;
-        font-weight: 600;
-        display: inline-block;
+        font-weight: 500;
     }
 
     .announcement-tag.important {
-        background-color: var(--error);
-        color: var(--white);
+        background-color: rgba(255, 107, 107, 0.2);
+        color: var(--error);
     }
 
     .announcement-tag.critical {
-        background-color: var(--secondary);
-        color: var(--primary-dark);
+        background-color: rgba(191, 162, 219, 0.2);
+        color: var(--secondary);
     }
 
     .announcement-tag.minor {
-        background-color: var(--success);
-        color: var(--white);
+        background-color: rgba(75, 181, 67, 0.2);
+        color: var(--success);
     }
 
     .announcement-tag.employee {
-        background-color: var(--primary);
-        color: var(--white);
+        background-color: rgba(75, 63, 114, 0.2);
+        color: var(--primary);
     }
 
     .announcement-actions {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
         margin-left: auto;
     }
 
     .announcement-action-btn {
-        padding: 10px 20px;
-        border-radius: var(--border-radius);
-        font-size: 14px;
-        cursor: pointer;
-        transition: var(--transition);
-        font-weight: 500;
-        background-color: var(--white);
-        color: var(--primary);
-        border: none;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    .announcement-action-btn:hover {
-        background-color: var(--light);
-        color: var(--primary-light);
-        box-shadow: var(--shadow-hover);
-    }
-
-    .delete-announcement {
         background: none;
         border: none;
         font-size: 16px;
-        color: var(--white);
-        opacity: 0.7;
+        color: var(--text-light);
         cursor: pointer;
+        transition: var(--transition);
     }
 
-    .delete-announcement:hover {
-        color: var(--error);
-        opacity: 1;
+    .announcement-action-btn:hover {
+        color: var(--primary);
     }
 
     .stats-card {
@@ -1310,24 +1269,6 @@ $philippineHolidays = [
         .dashboard-grid {
             padding: 20px;
         }
-        .announcement-banner {
-            flex-direction: column;
-            align-items: flex-start;
-            padding: 20px;
-        }
-        .announcement-text p {
-            max-width: 100%;
-            margin-bottom: 15px;
-        }
-        .announcement-actions {
-            margin-left: 0;
-            width: 100%;
-            justify-content: flex-end;
-        }
-        .announcement-action-btn {
-            padding: 8px 16px;
-            font-size: 13px;
-        }
     }
 
     @media (max-width: 768px) {
@@ -1355,31 +1296,16 @@ $philippineHolidays = [
             width: 100%;
             justify-content: space-between;
         }
-        .announcement-text h3 {
-            font-size: 18px;
+        .announcement-banner {
+            flex-direction: column;
+            align-items: flex-start;
         }
         .announcement-text p {
-            font-size: 14px;
+            max-width: 100%;
         }
-        .announcement-icon {
-            font-size: 24px;
-            margin-right: 15px;
-        }
-    }
-
-    @media (max-width: 576px) {
-        .announcement-action-btn {
-            padding: 7px 14px;
-            font-size: 12px;
-        }
-        .delete-announcement {
-            font-size: 14px;
-        }
-        .announcement-text h3 {
-            font-size: 16px;
-        }
-        .announcement-text p {
-            font-size: 13px;
+        .announcement-actions {
+            margin-left: 0;
+            margin-top: 10px;
         }
     }
 
@@ -1484,7 +1410,7 @@ $philippineHolidays = [
         </header>
 
         <div class="dashboard-grid">
-            <section class="announcement-banner <?php echo htmlspecialchars($latestAnnouncement['tag'] ?? ''); ?>" id="announcementBanner">
+            <section class="announcement-banner" id="announcementBanner">
                 <i class="fas fa-bullhorn announcement-icon"></i>
                 <div class="announcement-text">
                     <h3>Today's Announcements</h3>
@@ -1497,15 +1423,11 @@ $philippineHolidays = [
                     </p>
                 </div>
                 <div class="announcement-actions">
-                    <?php if ($currentUser['role'] === 'admin' || $currentUser['role'] === 'hr'): ?>
-                        <button class="announcement-action-btn" id="addAnnouncementBtn">
-                            <i class="fas fa-plus"></i> Add Announcement
+                    <i class="fas fa-chevron-right announcement-action-btn"></i>
+                    <?php if ($latestAnnouncement && ($currentUser['role'] === 'admin' || $currentUser['role'] === 'hr')): ?>
+                        <button class="announcement-action-btn delete-announcement" data-id="<?php echo $latestAnnouncement['id']; ?>">
+                            <i class="fas fa-trash"></i>
                         </button>
-                        <?php if ($latestAnnouncement): ?>
-                            <button class="announcement-action-btn delete-announcement" data-id="<?php echo $latestAnnouncement['id']; ?>">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </section>
@@ -1885,7 +1807,7 @@ $philippineHolidays = [
         });
 
         if (announcementModal) {
-            document.getElementById('addAnnouncementBtn').addEventListener('click', () => {
+            document.querySelector('.announcement-action-btn:not(.delete-announcement)').addEventListener('click', () => {
                 announcementModal.classList.add('active');
             });
 
@@ -1960,7 +1882,7 @@ $philippineHolidays = [
                     console.error('Error:', error);
                     showNotification('An error occurred while submitting the announcement. Please try again.', 'error');
                 });
-            });
+        });
         }
 
         document.querySelectorAll('.delete-announcement').forEach(button => {

@@ -1052,10 +1052,6 @@ $balance = getTimeOffBalance($pdo, $user_id);
                 <i class="fas fa-chart-line" aria-hidden="true"></i>
                 <span class="menu-text">Performance</span>
             </a>
-            <a href="emergency.php" class="menu-item">
-                <i class="fas fa-bell"></i>
-                <span class="menu-text">Emergency</span>
-            </a>
             <a href="login.html" class="menu-item">
                 <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
                 <span class="menu-text">Logout</span>

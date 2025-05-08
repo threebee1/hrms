@@ -814,9 +814,6 @@ $current_user = getUserDetails($conn, $current_user_id);
                         <a class="nav-link" href="Employeetimeoff.php">Time Off</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="Emergency.php">Emergency</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link active" href="employeeinbox.php">
                             Messages
                             <?php if ($unread_count > 0): ?>
